@@ -1,2 +1,2 @@
-# UnityHotReloadScript
+# UnityScriptHotReload
 hotreload without reload assembly
