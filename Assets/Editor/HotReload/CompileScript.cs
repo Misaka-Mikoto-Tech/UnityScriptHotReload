@@ -20,7 +20,6 @@ namespace ScriptHotReload
     public static class CompileScript
     {
         public static CompileStatus compileStatus { get; private set; }
-        public static CompileStatus manualCompileStatus { get; private set; }
 
         const string kTempScriptDir = "Temp/ScriptHotReload";
         const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
@@ -59,7 +58,7 @@ namespace ScriptHotReload
             
             Directory.CreateDirectory(outputDir);
             var status = EditorCompilationWrapper.CompileScriptsWithSettings(scriptAssemblySettings);
-            Debug.Log($"CompileScriptToDir, status:{status}");
+            Debug.Log($"开始编译dll到目录: {outputDir}");
             s_CompileRequested = true;
             s_codeChanged = true; // TODO 
 
@@ -127,20 +126,18 @@ namespace ScriptHotReload
 
         static bool IsIdle()
         {
-            return (compileStatus == CompileStatus.Idle || compileStatus == CompileStatus.CompilationFailed) &&
-                (manualCompileStatus == CompileStatus.Idle || manualCompileStatus == CompileStatus.CompilationFailed);
+            return (compileStatus == CompileStatus.Idle || compileStatus == CompileStatus.CompilationFailed);
         }
 
         static void ResetCompileStatus()
         {
             s_CompileRequested = false;
             compileStatus = CompileStatus.Idle;
-            manualCompileStatus = CompileStatus.Idle;
         }
 
         static void ManualTickCompilationPipeline()
         {
-            manualCompileStatus = EditorCompilationWrapper.TickCompilationPipeline(
+            compileStatus = EditorCompilationWrapper.TickCompilationPipeline(
                         s_editorBuildParams.options, s_editorBuildParams.platformGroup, s_editorBuildParams.platform,
                         s_editorBuildParams.subtarget, s_editorBuildParams.extraScriptingDefines);
         }
