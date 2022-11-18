@@ -10,6 +10,7 @@ using System.Reflection;
 using MonoHook;
 using System.Runtime.CompilerServices;
 using System;
+using System.Reflection.Emit;
 
 namespace ScriptHotReload
 {
@@ -19,6 +20,7 @@ namespace ScriptHotReload
     public static class CompileScript
     {
         public static CompileStatus compileStatus { get; private set; }
+        public static CompileStatus manualCompileStatus { get; private set; }
 
         const string kTempScriptDir = "Temp/ScriptHotReload";
         const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
@@ -34,11 +36,8 @@ namespace ScriptHotReload
         }
 
         static EditorBuildParams s_editorBuildParams;
-
-        static object s_objEditorCompilation;
-        static MethodInfo s_miCreateScriptAssemblySettings;
-        static MethodInfo s_CompileScriptsWithSettings;
-        static MethodInfo s_setOutputDirectory;
+        static bool s_CompileRequested = false;
+        static bool s_codeChanged = false;
 
         [MenuItem("Tools/ScriptHotReload")]
         public static void BuildToTempDir()
@@ -46,58 +45,40 @@ namespace ScriptHotReload
             CompileScriptToDir(kTempScriptDir);
         }
 
-        public static void CompileScriptToDir(string buildDir)
+        public static void CompileScriptToDir(string outputDir)
         {
-            if(compileStatus != CompileStatus.Idle)
+            if(!IsIdle())
             {
                 Debug.LogError($"当前编译状态:{compileStatus}, 不允许执行编译");
                 return;
             }
 
-            object scriptAssemblySettings = s_miCreateScriptAssemblySettings.Invoke(s_objEditorCompilation,
-                new object[] { s_editorBuildParams.platformGroup, s_editorBuildParams.platform, (int)s_editorBuildParams.options, s_editorBuildParams.extraScriptingDefines });
-            // 修改输出目录
-            Directory.CreateDirectory(buildDir);
-            s_setOutputDirectory.Invoke(scriptAssemblySettings, new object[] { buildDir });
-            var status = s_CompileScriptsWithSettings.Invoke(s_objEditorCompilation, new object[] { scriptAssemblySettings });
+            // 生成编译配置并指定输出目录
+            object scriptAssemblySettings = EditorCompilationWrapper.CreateScriptAssemblySettings(
+                s_editorBuildParams.platformGroup, s_editorBuildParams.platform, s_editorBuildParams.options, s_editorBuildParams.extraScriptingDefines, outputDir);
+            
+            Directory.CreateDirectory(outputDir);
+            var status = EditorCompilationWrapper.CompileScriptsWithSettings(scriptAssemblySettings);
             Debug.Log($"CompileScriptToDir, status:{status}");
+            s_CompileRequested = true;
+            s_codeChanged = true; // TODO 
+
+            ManualTickCompilationPipeline();
         }
 
 
         [DidReloadScripts]
-        static void InitHooksAndGetMethods()
+        static void Init()
         {
-            var tInterface = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilationInterface");
-            var tCompilation = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilation");
-            var tAssemblySettings = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.ScriptAssemblySettings");
-
-            {
-                var miOri = tInterface.GetMethod("TickCompilationPipeline", BindingFlags.Static | BindingFlags.Public);
+            {// install hook
+                var miOri = EditorCompilationWrapper.miTickCompilationPipeline;
                 var miNew = typeof(CompileScript).GetMethod(nameof(TickCompilationPipeline), BindingFlags.NonPublic | BindingFlags.Static);
                 var miReplace = typeof(CompileScript).GetMethod(nameof(TickCompilationPipeline_Proxy), BindingFlags.NonPublic | BindingFlags.Static);
                 new MethodHook(miOri, miNew, miReplace).Install();
             }
 
-            {
-                s_objEditorCompilation = tInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
-                Debug.Log($"s_objEditorCompilation != null:{s_objEditorCompilation != null}");
-                var mis = tCompilation.GetMethods();
-                foreach(var mi in mis)
-                {
-                    if (mi.Name == "CreateScriptAssemblySettings" && mi.GetParameters().Length == 4)
-                        s_miCreateScriptAssemblySettings = mi;
-                    else if (mi.Name == "CompileScriptsWithSettings")
-                        s_CompileScriptsWithSettings = mi;
-                }
-
-                Debug.Assert(s_miCreateScriptAssemblySettings != null);
-                Debug.Assert(s_CompileScriptsWithSettings != null);
-
-                s_setOutputDirectory = tAssemblySettings.GetProperty("OutputDirectory", BindingFlags.Public).GetSetMethod();
-                Debug.Assert(s_setOutputDirectory != null);
-            }
-
             EditorApplication.playModeStateChanged += OnPlayModeChange;
+            EditorApplication.update += EditorApplication_Update;
         }
 
         static void OnPlayModeChange(PlayModeStateChange mode)
@@ -106,44 +87,62 @@ namespace ScriptHotReload
             {
                 case PlayModeStateChange.EnteredPlayMode:
                     {
+                        ResetCompileStatus();
                         string json = EditorPrefs.GetString(kEditorScriptBuildParamsKey);
                         if (!string.IsNullOrEmpty(json))
                             s_editorBuildParams = JsonUtility.FromJson<EditorBuildParams>(json);
                         break;
                     }
-                case PlayModeStateChange.ExitingEditMode:
+                case PlayModeStateChange.ExitingEditMode: // 退出编辑模式保存编译参数
                     {
                         string json = JsonUtility.ToJson(s_editorBuildParams);
                         EditorPrefs.SetString(kEditorScriptBuildParamsKey, json);
                         break;
                     }
+                case PlayModeStateChange.ExitingPlayMode:
+                    {
+                        ResetCompileStatus();
+                        if (s_codeChanged)
+                            EditorCompilationWrapper.RequestScriptCompilation("运行过程中代码被修改");
+                        break;
+                    }
             }
         }
 
-        public enum CompileStatus
+        static void EditorApplication_Update()
         {
-            Idle,
-            Compiling,
-            CompilationStarted,
-            CompilationFailed,
-            CompilationComplete
+            if(s_CompileRequested)
+            {
+                if(IsIdle())
+                {
+                    s_CompileRequested = false;
+                    Debug.Log("编译已完成");
+                }
+                else if(Application.isPlaying) // PlayMode 下Unity会停止调用 TickCompilationPipeline, 导致编译请求进度无法前进，所以需要我们手动去执行
+                {
+                    ManualTickCompilationPipeline();
+                }
+            }
         }
 
-        [Flags]
-        enum EditorScriptCompilationOptions
+        static bool IsIdle()
         {
-            BuildingEmpty                               = 0,
-            BuildingDevelopmentBuild                    = 1 << 0,
-            BuildingForEditor                           = 1 << 1,
-            BuildingEditorOnlyAssembly                  = 1 << 2,
-            BuildingForIl2Cpp                           = 1 << 3,
-            BuildingWithAsserts                         = 1 << 4,
-            BuildingIncludingTestAssemblies             = 1 << 5,
-            BuildingPredefinedAssembliesAllowUnsafeCode = 1 << 6,
-            BuildingForHeadlessPlayer                   = 1 << 7,
-            BuildingUseDeterministicCompilation         = 1 << 9,
-            BuildingWithRoslynAnalysis                  = 1 << 10,
-            BuildingWithoutScriptUpdater                = 1 << 11
+            return (compileStatus == CompileStatus.Idle || compileStatus == CompileStatus.CompilationFailed) &&
+                (manualCompileStatus == CompileStatus.Idle || manualCompileStatus == CompileStatus.CompilationFailed);
+        }
+
+        static void ResetCompileStatus()
+        {
+            s_CompileRequested = false;
+            compileStatus = CompileStatus.Idle;
+            manualCompileStatus = CompileStatus.Idle;
+        }
+
+        static void ManualTickCompilationPipeline()
+        {
+            manualCompileStatus = EditorCompilationWrapper.TickCompilationPipeline(
+                        s_editorBuildParams.options, s_editorBuildParams.platformGroup, s_editorBuildParams.platform,
+                        s_editorBuildParams.subtarget, s_editorBuildParams.extraScriptingDefines);
         }
 
         /// <summary>
