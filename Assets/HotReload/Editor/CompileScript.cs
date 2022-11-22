@@ -21,8 +21,9 @@ namespace ScriptHotReload
     {
         public static CompileStatus compileStatus { get; private set; }
 
-        const string kTempScriptDir = "Temp/ScriptHotReload";
         const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
+
+        public static Action<CompileStatus> OnCompileSuccess;
 
         [Serializable]
         struct EditorBuildParams
@@ -38,12 +39,6 @@ namespace ScriptHotReload
         static bool s_CompileRequested = false;
         static bool s_codeChanged = false;
 
-        [MenuItem("Tools/ScriptHotReload")]
-        public static void BuildToTempDir()
-        {
-            CompileScriptToDir(kTempScriptDir);
-        }
-
         public static void CompileScriptToDir(string outputDir)
         {
             if(!IsIdle())
@@ -57,6 +52,7 @@ namespace ScriptHotReload
                 s_editorBuildParams.platformGroup, s_editorBuildParams.platform, s_editorBuildParams.options, s_editorBuildParams.extraScriptingDefines, outputDir);
             
             Directory.CreateDirectory(outputDir);
+            RemoveAllFiles(outputDir);
             var status = EditorCompilationWrapper.CompileScriptsWithSettings(scriptAssemblySettings);
             Debug.Log($"开始编译dll到目录: {outputDir}");
             s_CompileRequested = true;
@@ -108,6 +104,13 @@ namespace ScriptHotReload
             }
         }
 
+        static void RemoveAllFiles(string dir)
+        {
+            string[] files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
+            foreach (var file in files)
+                File.Delete(file);
+        }
+
         static void EditorApplication_Update()
         {
             if(s_CompileRequested)
@@ -115,7 +118,16 @@ namespace ScriptHotReload
                 if(IsIdle())
                 {
                     s_CompileRequested = false;
-                    Debug.Log("编译已完成");
+                    OnCompileSuccess?.Invoke(compileStatus);
+
+                    if (compileStatus == CompileStatus.Idle)
+                    {
+                        Debug.Log("编译已完成");
+                    }
+                    else
+                    {
+                        Debug.LogError($"编译失败:{compileStatus}");
+                    }
                 }
                 else if(Application.isPlaying) // PlayMode 下Unity会停止调用 TickCompilationPipeline, 导致编译请求进度无法前进，所以需要我们手动去执行
                 {
