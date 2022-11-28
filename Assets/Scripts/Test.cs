@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -17,10 +18,28 @@ public class Test : MonoBehaviour
     }
 }
 
-public class Test3
+namespace NS_Test
 {
-    public void Test()
+    public class Test3
     {
-        Debug.Log("xy");
+        public Action<int> act = x =>
+        {
+            x += 2;
+            Debug.Log(x * 3);
+        };
+
+        public void Test(out int val)
+        {
+            val = 2;
+            Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}..."); return x > 101; };
+            Debug.Log($"x is OK:{f(val + 2)}");
+        }
+
+        public string TestG<T>(out int val1, T val2) where T : UnityEngine.Object
+        {
+            val1 = 123;
+            act(val1);
+            return val2.name;
+        }
     }
 }

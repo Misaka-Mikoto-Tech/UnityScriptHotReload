@@ -12,6 +12,8 @@ using System.Runtime.CompilerServices;
 using System;
 using System.Reflection.Emit;
 
+using static ScriptHotReload.HotReloadUtils;
+
 namespace ScriptHotReload
 {
     /// <summary>
@@ -21,12 +23,11 @@ namespace ScriptHotReload
     {
         public static CompileStatus compileStatus { get; private set; }
 
-        const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
-
         public static Action<CompileStatus> OnCompileSuccess;
+        public static EditorBuildParams editorBuildParams;
 
         [Serializable]
-        struct EditorBuildParams
+        public struct EditorBuildParams
         {
             public EditorScriptCompilationOptions   options;
             public BuildTargetGroup                 platformGroup;
@@ -34,10 +35,8 @@ namespace ScriptHotReload
             public int                              subtarget;
             public string[]                         extraScriptingDefines;
         }
-
-        static EditorBuildParams s_editorBuildParams;
+        
         static bool s_CompileRequested = false;
-        static bool s_codeChanged = false;
 
         public static void CompileScriptToDir(string outputDir)
         {
@@ -49,14 +48,13 @@ namespace ScriptHotReload
 
             // 生成编译配置并指定输出目录
             object scriptAssemblySettings = EditorCompilationWrapper.CreateScriptAssemblySettings(
-                s_editorBuildParams.platformGroup, s_editorBuildParams.platform, s_editorBuildParams.options, s_editorBuildParams.extraScriptingDefines, outputDir);
+                editorBuildParams.platformGroup, editorBuildParams.platform, editorBuildParams.options, editorBuildParams.extraScriptingDefines, outputDir);
             
             Directory.CreateDirectory(outputDir);
             RemoveAllFiles(outputDir);
             var status = EditorCompilationWrapper.CompileScriptsWithSettings(scriptAssemblySettings);
             Debug.Log($"开始编译dll到目录: {outputDir}");
             s_CompileRequested = true;
-            s_codeChanged = true; // TODO 
 
             ManualTickCompilationPipeline();
         }
@@ -72,43 +70,7 @@ namespace ScriptHotReload
                 new MethodHook(miOri, miNew, miReplace).Install();
             }
 
-            EditorApplication.playModeStateChanged += OnPlayModeChange;
             EditorApplication.update += EditorApplication_Update;
-        }
-
-        static void OnPlayModeChange(PlayModeStateChange mode)
-        {
-            switch(mode)
-            {
-                case PlayModeStateChange.EnteredPlayMode:
-                    {
-                        ResetCompileStatus();
-                        string json = EditorPrefs.GetString(kEditorScriptBuildParamsKey);
-                        if (!string.IsNullOrEmpty(json))
-                            s_editorBuildParams = JsonUtility.FromJson<EditorBuildParams>(json);
-                        break;
-                    }
-                case PlayModeStateChange.ExitingEditMode: // 退出编辑模式保存编译参数
-                    {
-                        string json = JsonUtility.ToJson(s_editorBuildParams);
-                        EditorPrefs.SetString(kEditorScriptBuildParamsKey, json);
-                        break;
-                    }
-                case PlayModeStateChange.ExitingPlayMode:
-                    {
-                        ResetCompileStatus();
-                        if (s_codeChanged)
-                            EditorCompilationWrapper.RequestScriptCompilation("运行过程中代码被修改");
-                        break;
-                    }
-            }
-        }
-
-        static void RemoveAllFiles(string dir)
-        {
-            string[] files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
-            foreach (var file in files)
-                File.Delete(file);
         }
 
         static void EditorApplication_Update()
@@ -138,10 +100,10 @@ namespace ScriptHotReload
 
         static bool IsIdle()
         {
-            return (compileStatus == CompileStatus.Idle || compileStatus == CompileStatus.CompilationFailed);
+            return compileStatus == CompileStatus.Idle || compileStatus == CompileStatus.CompilationFailed;
         }
 
-        static void ResetCompileStatus()
+        public static void ResetCompileStatus()
         {
             s_CompileRequested = false;
             compileStatus = CompileStatus.Idle;
@@ -150,8 +112,8 @@ namespace ScriptHotReload
         static void ManualTickCompilationPipeline()
         {
             compileStatus = EditorCompilationWrapper.TickCompilationPipeline(
-                        s_editorBuildParams.options, s_editorBuildParams.platformGroup, s_editorBuildParams.platform,
-                        s_editorBuildParams.subtarget, s_editorBuildParams.extraScriptingDefines);
+                        editorBuildParams.options, editorBuildParams.platformGroup, editorBuildParams.platform,
+                        editorBuildParams.subtarget, editorBuildParams.extraScriptingDefines);
         }
 
         /// <summary>
@@ -161,11 +123,11 @@ namespace ScriptHotReload
         /// <remarks>此函数每帧都会被调用，即使当前无需编译</remarks>
         static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines)
         {
-            s_editorBuildParams.options = options;
-            s_editorBuildParams.platformGroup = platfromGroup;
-            s_editorBuildParams.platform = platform;
-            s_editorBuildParams.subtarget = subtarget;
-            s_editorBuildParams.extraScriptingDefines = extraScriptingDefines;
+            editorBuildParams.options = options;
+            editorBuildParams.platformGroup = platfromGroup;
+            editorBuildParams.platform = platform;
+            editorBuildParams.subtarget = subtarget;
+            editorBuildParams.extraScriptingDefines = extraScriptingDefines;
 
             compileStatus = TickCompilationPipeline_Proxy(options, platfromGroup, platform, subtarget, extraScriptingDefines);
             //Debug.Log($"TickCompilationPipleline with status:{s_CompileStatus}");

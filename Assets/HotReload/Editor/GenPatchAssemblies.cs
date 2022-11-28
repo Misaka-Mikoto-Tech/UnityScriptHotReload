@@ -13,19 +13,27 @@ using System;
 using System.Reflection.Emit;
 using Mono;
 using Mono.Cecil;
-using static ScriptHotReload.HotReloadUtils;
 using System.Linq;
 using System.Text;
+using NUnit.Framework;
+
+using static ScriptHotReload.HotReloadUtils;
 
 namespace ScriptHotReload
 {
     public class GenPatchAssemblies
     {
-        public class AssemblyDiffInfo
+        public static bool codeHasChanged => methodsToHook.Count > 0;
+
+        public class MethodData
         {
-            public Dictionary<Type, List<MethodInfo>> modified;
-            public Dictionary<Type, List<MethodInfo>> removed;
-            public Dictionary<Type, List<MethodInfo>> added;
+            public MethodDefinition definition;
+            public MethodInfo methodInfo;
+
+            public MethodData(MethodDefinition definition, MethodInfo methodInfo)
+            {
+                this.definition = definition; this.methodInfo = methodInfo;
+            }
         }
 
         /// <summary>
@@ -36,13 +44,13 @@ namespace ScriptHotReload
             "Assembly-CSharp.dll"
         };
 
-        public static Dictionary<string, List<MethodDefinition>> dic_diffInfos { get; private set; } = new Dictionary<string, List<MethodDefinition>>();
+        public static Dictionary<string, List<MethodData>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodData>>();
 
         public const string kTempScriptDir = "Temp/ScriptHotReload";
         public const string kTempCompileToDir = "Temp/ScriptHotReload/tmp";
         const string kBuiltinAssembliesDir = "Library/ScriptAssemblies";
 
-        static int currPatchCount = 0;
+        static int currPatchNo = 0;
 
         [MenuItem("Tools/DoGenPatchAssemblies")]
         public static void DoGenPatchAssemblies()
@@ -57,11 +65,19 @@ namespace ScriptHotReload
                 return;
 
             CompareAssemblies();
+            DoHook();
+            if (methodsToHook.Count > 0)
+                currPatchNo++;
+        }
+
+        static void DoHook()
+        {
+            // TODO
         }
 
         static void CompareAssemblies()
         {
-            dic_diffInfos.Clear();
+            methodsToHook.Clear();
             float t = Time.realtimeSinceStartup;
             foreach (var assName in hotReloadAssemblies)
                 GenAssemblyDiffInfo(assName);
@@ -69,18 +85,19 @@ namespace ScriptHotReload
             Debug.Log($"check diff elipse:{t}");
 
             ShowDiffMethods();
+            ModifyAndGenAssemblies();
         }
 
         static void ShowDiffMethods()
         {
             int count = 0;
             StringBuilder sb = new StringBuilder();
-            foreach (var kv in dic_diffInfos)
+            foreach (var kv in methodsToHook)
             {
                 foreach (var md in kv.Value)
                 {
                     count++;
-                    sb.AppendLine($"{kv.Key}.{md.FullName}");
+                    sb.AppendLine($"{kv.Key}.{md.definition.FullName}");
                 }
             }
 
@@ -94,18 +111,17 @@ namespace ScriptHotReload
         /// 找出新旧Assembly中的的有差异的函数，目前要求类型和函数的数量和签名均需一致
         /// </summary>
         /// <param name="assName"></param>
+        /// <remarks>目前无性能优化，很多都是通过ToString进行差异比较的</remarks>
         static void GenAssemblyDiffInfo(string assName)
         {
             string baseDll = $"{kBuiltinAssembliesDir}/{assName}";
             string lastDll = $"{kTempScriptDir}/{Path.GetFileNameWithoutExtension(assName)}__last.dll";
             string newDll = $"{kTempCompileToDir}/{assName}";
 
-            if (IsFilesEqual(baseDll, lastDll))
+            if (IsFilesEqual(newDll, lastDll))
                 return;
 
-            //File.Copy(newDll, lastDll, true);
-
-            List<MethodDefinition> methodModified = new List<MethodDefinition>();
+            List<MethodData> methodModified = new List<MethodData>();
 
             // check diff of newDll and baseDll
             using var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll); // TODO baseDll 可以只读取一次
@@ -126,75 +142,147 @@ namespace ScriptHotReload
             {
                 var baseT = baseTypes[i];
                 var newT = newTypes[i];
-                if(baseT.FullName != newT.FullName)
-                {
-                    Debug.LogError($"Types mismatched in assembly {assName} between {baseT.FullName} and {newT.FullName}");
+                bool typeRet = GenTypeDiffMethodInfos(baseT, newT, methodModified);
+                if (!typeRet)
                     return;
+            }
+
+            // fill MethodInfo field of MethodData
+            {
+                Assembly ass = (from ass_ in AppDomain.CurrentDomain.GetAssemblies() where ass_.FullName == baseAssDef.FullName select ass_).FirstOrDefault();
+                Debug.Assert(ass != null);
+
+                Dictionary<TypeDefinition, Type> dicType = new Dictionary<TypeDefinition, Type>();
+                foreach(var md in methodModified)
+                {
+                    Type t;
+                    MethodDefinition definition = md.definition;
+                    if (!dicType.TryGetValue(definition.DeclaringType, out t))
+                    {
+                        t = ass.GetType(definition.DeclaringType.FullName);
+                        Debug.Assert(t != null);
+                        dicType.Add(definition.DeclaringType, t);
+                    }
+                    md.methodInfo = GetMethodInfoSlow(t, definition);
+                    if(md.methodInfo == null)
+                    {
+                        Debug.LogError($"can not find MethodInfo of [{md.definition.FullName}]");
+                    }
+                }
+            }
+
+            if(methodModified.Count > 0)
+                methodsToHook.Add(assName, methodModified);
+        }
+
+        static bool GenTypeDiffMethodInfos(TypeDefinition baseTypeDef, TypeDefinition newTypeDef, List<MethodData> methodModified)
+        {
+            if (baseTypeDef.FullName != newTypeDef.FullName)
+            {
+                Debug.LogError($"Type name mismatched in [{baseTypeDef.Module.Name}.{baseTypeDef.FullName}] , assembly skiped");
+                return false;
+            }
+
+            var baseMethods = baseTypeDef.Methods.ToList();
+            var newMethods = newTypeDef.Methods.ToList();
+            baseMethods.Sort(TypeDefComparer<MethodDefinition>.comparer);
+            newMethods.Sort(TypeDefComparer<MethodDefinition>.comparer);
+
+            if (baseMethods.Count != newMethods.Count)
+            {
+                Debug.LogError($"Methods count mismatched in [{baseTypeDef.Module.Name}.{baseTypeDef.FullName}] , assembly skiped");
+                return false;
+            }
+
+            for (int i = 0, imax = baseMethods.Count; i < imax; i++)
+            {
+                var baseM = baseMethods[i];
+                var newM = newMethods[i];
+
+                if (baseM.IsAbstract || newM.IsAbstract || !baseM.HasBody || !newM.HasBody)
+                {
+                    continue; // 无函数体的函数跳过
                 }
 
-                var baseMethods = baseT.Methods.ToList();
-                var newMethods = newT.Methods.ToList();
-                baseMethods.Sort(TypeDefComparer<MethodDefinition>.comparer);
-                newMethods.Sort(TypeDefComparer<MethodDefinition>.comparer);
+                if (baseM.Name.Contains(".cctor")) // 静态构造函数只会被初始化一次，hook没有意义
+                    continue;
 
-                if(baseMethods.Count != newMethods.Count)
+                string baseSig = baseM.ToString();
+                string newSig = newM.ToString();
+                if(baseSig != newSig)
                 {
-                    Debug.LogError($"Methods count mismatched in [{assName}.{baseT.FullName}] , assembly skiped");
-                    return;
+                    Debug.LogError($"Method signature mismatched between {baseTypeDef.Module.Name}.[{baseSig}] and [{newSig}], assembly skiped");
+                    return false;
                 }
 
-                for(int j = 0, jmax = baseMethods.Count; j < jmax; j++)
+                var baseIns = baseM.Body.Instructions;
+                var newIns = newM.Body.Instructions;
+                if (baseIns.Count != newIns.Count)
+                    methodModified.Add(new MethodData(baseM, null));
+                else
                 {
-                    var baseM = baseMethods[j];
-                    var newM = newMethods[j];
-                    if(baseM.FullName != newM.FullName)
+                    var arrBaseIns = baseIns.ToArray();
+                    var arrNewIns = newIns.ToArray();
+                    for (int l = 0, lmax = arrBaseIns.Length; l < lmax; l++)
                     {
-                        Debug.LogError($"Method name mismatched in [{assName}.{baseT.FullName}] between {baseM.Name} and {newM.Name}");
-                        return;
-                    }
-
-                    if(baseM.IsAbstract || newM.IsAbstract || !baseM.HasBody || !newM.HasBody)
-                    {
-                        continue; // 无函数体的函数跳过
-                    }
-
-                    if(baseM.ReturnType.FullName != newM.ReturnType.FullName || baseM.Parameters.Count != newM.Parameters.Count)
-                    {
-                        Debug.LogError($"Method return type or parameter count mismatched in [{assName}.{baseT.FullName}.{baseM.Name}]");
-                        return;
-                    }
-                    for(int k = 0, kmax = baseM.Parameters.Count; k < kmax;k++)
-                    {
-                        var baseParaT = baseM.Parameters[k].ParameterType;
-                        var newParaT = newM.Parameters[k].ParameterType;
-                        if (baseParaT.FullName != newParaT.FullName)
+                        if (arrBaseIns[l].ToString() != arrNewIns[l].ToString())
                         {
-                            Debug.LogError($"Parameter[{k}] type mismatched in [{assName}.{baseT.FullName}.{baseM.Name}] between {baseParaT} and {newParaT}");
-                            return;
-                        }
-                    }
-
-                    var baseIns = baseM.Body.Instructions;
-                    var newIns = newM.Body.Instructions;
-                    if (baseIns.Count != newIns.Count)
-                        methodModified.Add(baseM);
-                    else
-                    {
-                        var arrBaseIns = baseIns.ToArray();
-                        var arrNewIns = newIns.ToArray();
-                        for(int l = 0, lmax = arrBaseIns.Length; l < lmax;l++)
-                        {
-                            if (arrBaseIns[l].ToString() != arrNewIns[l].ToString())
-                            {
-                                methodModified.Add(baseM);
-                                break;
-                            }
+                            methodModified.Add(new MethodData(baseM, null));
+                            break;
                         }
                     }
                 }
             }
 
-            dic_diffInfos.Add(assName, methodModified);
+            if (baseTypeDef.NestedTypes.Count != newTypeDef.NestedTypes.Count)
+            {
+                Debug.Log($"Nested Type count changed in [{baseTypeDef.Module.Name}.{baseTypeDef.FullName}]");
+                return false;
+            }
+
+            if(baseTypeDef.NestedTypes.Count > 0)
+            {
+                var baseNestedTypes = baseTypeDef.NestedTypes.ToList();
+                var newNestedTypes = newTypeDef.NestedTypes.ToList();
+
+                baseNestedTypes.Sort(TypeDefComparer<TypeDefinition>.comparer);
+                newNestedTypes.Sort(TypeDefComparer<TypeDefinition>.comparer);
+
+                for (int j = 0, jmax = baseNestedTypes.Count; j < jmax; j++)
+                {
+                    var baseNT = baseNestedTypes[j];
+                    var newNT = newNestedTypes[j];
+                    bool nret = GenTypeDiffMethodInfos(baseNT, newNT, methodModified);
+                    if (!nret)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        static void ModifyAndGenAssemblies()
+        {
+            foreach(var assName in hotReloadAssemblies)
+            {
+                string assNameNoExt = Path.GetFileNameWithoutExtension(assName);
+
+                string lastDll = $"{kTempScriptDir}/{assNameNoExt}__last.dll";
+                string tmpDll = $"{kTempCompileToDir}/{assName}";
+                string newDll = $"{kTempScriptDir}/{assNameNoExt}_{currPatchNo}.dll";
+
+                File.Copy(tmpDll, lastDll, true);
+
+                if (methodsToHook.ContainsKey(assName))
+                {
+                    using var baseAssDef = AssemblyDefinition.ReadAssembly(tmpDll);
+                    baseAssDef.Name.Name = $"{baseAssDef.Name}_{currPatchNo}";
+                    baseAssDef.Write(newDll);
+                }
+            }
+
+            RemoveAllFiles(kTempCompileToDir);
+            Directory.Delete(kTempCompileToDir);
         }
 
         class TypeDefComparer<T> : IComparer<T> where T: MemberReference
