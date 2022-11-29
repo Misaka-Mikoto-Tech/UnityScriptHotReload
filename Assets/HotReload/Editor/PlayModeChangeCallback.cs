@@ -8,13 +8,13 @@ using System.Reflection;
 using Mono.Cecil;
 using UnityEditor;
 
+using static ScriptHotReload.HotReloadConfig;
+
 namespace ScriptHotReload
 {
     [InitializeOnLoad]
     public static class PlayModeChangeCallback
     {
-        public const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
-
         static PlayModeChangeCallback()
         {
             EditorApplication.playModeStateChanged += OnPlayModeChange;
@@ -26,9 +26,9 @@ namespace ScriptHotReload
             {
                 case PlayModeStateChange.EnteredPlayMode:
                     {
-                        HotReloadUtils.RemoveAllFiles(GenPatchAssemblies.kTempScriptDir);
-                        if (Directory.Exists(GenPatchAssemblies.kTempCompileToDir))
-                            Directory.Delete(GenPatchAssemblies.kTempCompileToDir);
+                        HotReloadUtils.RemoveAllFiles(kTempScriptDir);
+                        if (Directory.Exists(kTempCompileToDir))
+                            Directory.Delete(kTempCompileToDir);
 
                         CompileScript.ResetCompileStatus();
                         string json = EditorPrefs.GetString(kEditorScriptBuildParamsKey);
@@ -54,7 +54,7 @@ namespace ScriptHotReload
                     }
                 case PlayModeStateChange.EnteredEditMode:
                     {
-                        HotReloadUtils.RemoveAllFiles(GenPatchAssemblies.kTempScriptDir);
+                        HotReloadUtils.RemoveAllFiles(kTempScriptDir); // TODO 改成调用 cmd 延迟删除，否则会提示占用
                         break;
                     }
             }

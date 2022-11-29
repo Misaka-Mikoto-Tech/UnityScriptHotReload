@@ -64,6 +64,22 @@ namespace ScriptHotReload
             return flags;
         }
 
+        public static BindingFlags BuildBindingFlags(MethodInfo methodInfo)
+        {
+            BindingFlags flags = BindingFlags.Default;
+            if (methodInfo.IsPublic)
+                flags |= BindingFlags.Public;
+            else
+                flags |= BindingFlags.NonPublic;
+
+            if (methodInfo.IsStatic)
+                flags |= BindingFlags.Static;
+            else
+                flags |= BindingFlags.Instance;
+
+            return flags;
+        }
+
         /// <summary>
         /// 以 MethodDefinition 为参数或者 MethodInfo
         /// </summary>
@@ -98,6 +114,29 @@ namespace ScriptHotReload
                     if(found)
                         return mi;
                 }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 从指定Assembly中查找特定签名的方法
+        /// </summary>
+        /// <param name="methodInfo"></param>
+        /// <param name="assembly"></param>
+        /// <returns></returns>
+        public static MethodInfo GetMethodFromAssembly(MethodInfo methodInfo, Assembly assembly)
+        {
+            string typeName = methodInfo.DeclaringType.FullName;
+            Type t = assembly.GetType(typeName);
+            if (t == null)
+                return null;
+
+            string methodSig = methodInfo.ToString();
+            MethodInfo[] mis = t.GetMethods(BuildBindingFlags(methodInfo));
+            foreach(var mi in mis)
+            {
+                if (mi.ToString() == methodSig)
+                    return mi;
             }
             return null;
         }

@@ -15,9 +15,9 @@ using Mono;
 using Mono.Cecil;
 using System.Linq;
 using System.Text;
-using NUnit.Framework;
 
 using static ScriptHotReload.HotReloadUtils;
+using static ScriptHotReload.HotReloadConfig;
 
 namespace ScriptHotReload
 {
@@ -36,46 +36,32 @@ namespace ScriptHotReload
             }
         }
 
-        /// <summary>
-        /// 需要执行 HotReload 的程序集名称
-        /// </summary>
-        public static List<string> hotReloadAssemblies = new List<string>()
-        {
-            "Assembly-CSharp.dll"
-        };
-
         public static Dictionary<string, List<MethodData>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodData>>();
 
-        public const string kTempScriptDir = "Temp/ScriptHotReload";
-        public const string kTempCompileToDir = "Temp/ScriptHotReload/tmp";
-        const string kBuiltinAssembliesDir = "Library/ScriptAssemblies";
-
-        static int currPatchNo = 0;
+        public static int patchNo { get; private set; } = 0;
 
         [MenuItem("Tools/DoGenPatchAssemblies")]
         public static void DoGenPatchAssemblies()
         {
+            if (!Application.isPlaying)
+                return;
+
             CompileScript.OnCompileSuccess = OnScriptCompileSuccess;
             CompileScript.CompileScriptToDir(kTempCompileToDir);
         }
 
-        static void OnScriptCompileSuccess(CompileStatus status)
+        public static void OnScriptCompileSuccess(CompileStatus status)
         {
             if (status != CompileStatus.Idle)
                 return;
 
-            CompareAssemblies();
-            DoHook();
+            GenAssemblyAndInfos();
+            HookAssemblies.DoHook(methodsToHook);
             if (methodsToHook.Count > 0)
-                currPatchNo++;
+                patchNo++;
         }
 
-        static void DoHook()
-        {
-            // TODO
-        }
-
-        static void CompareAssemblies()
+        static void GenAssemblyAndInfos()
         {
             methodsToHook.Clear();
             float t = Time.realtimeSinceStartup;
@@ -115,7 +101,7 @@ namespace ScriptHotReload
         static void GenAssemblyDiffInfo(string assName)
         {
             string baseDll = $"{kBuiltinAssembliesDir}/{assName}";
-            string lastDll = $"{kTempScriptDir}/{Path.GetFileNameWithoutExtension(assName)}__last.dll";
+            string lastDll = string.Format(kLastDllPathFormat, Path.GetFileNameWithoutExtension(assName));
             string newDll = $"{kTempCompileToDir}/{assName}";
 
             if (IsFilesEqual(newDll, lastDll))
@@ -267,17 +253,17 @@ namespace ScriptHotReload
             {
                 string assNameNoExt = Path.GetFileNameWithoutExtension(assName);
 
-                string lastDll = $"{kTempScriptDir}/{assNameNoExt}__last.dll";
+                string lastDll = string.Format(kLastDllPathFormat, assNameNoExt);
                 string tmpDll = $"{kTempCompileToDir}/{assName}";
-                string newDll = $"{kTempScriptDir}/{assNameNoExt}_{currPatchNo}.dll";
+                string patchDll = $"{kTempScriptDir}/{assNameNoExt}_{patchNo}.dll";
 
                 File.Copy(tmpDll, lastDll, true);
 
                 if (methodsToHook.ContainsKey(assName))
                 {
                     using var baseAssDef = AssemblyDefinition.ReadAssembly(tmpDll);
-                    baseAssDef.Name.Name = $"{baseAssDef.Name}_{currPatchNo}";
-                    baseAssDef.Write(newDll);
+                    baseAssDef.Name.Name = $"{baseAssDef.Name}_{patchNo}";
+                    baseAssDef.Write(patchDll);
                 }
             }
 
