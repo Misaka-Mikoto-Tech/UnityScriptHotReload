@@ -25,20 +25,11 @@ namespace ScriptHotReload
     {
         public static bool codeHasChanged => methodsToHook.Count > 0;
 
-        public class MethodData
-        {
-            public MethodDefinition definition;
-            public MethodInfo methodInfo;
-
-            public MethodData(MethodDefinition definition, MethodInfo methodInfo)
-            {
-                this.definition = definition; this.methodInfo = methodInfo;
-            }
-        }
-
         public static Dictionary<string, List<MethodData>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodData>>();
 
         public static int patchNo { get; private set; } = 0;
+
+        private static Dictionary<string, AssemblyData> _assemblyDatas = new Dictionary<string, AssemblyData>();
 
         [MenuItem("Tools/DoGenPatchAssemblies")]
         public static void DoGenPatchAssemblies()

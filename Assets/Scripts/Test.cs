@@ -13,6 +13,7 @@ public class Test : MonoBehaviour
     {
         btnTest.onClick.AddListener(OnBtnTest);
         NS_Test.Test3.s_val = 456;
+        NS_Test.Test4.val = 1234;
     }
 
     void OnBtnTest()
@@ -38,6 +39,8 @@ namespace NS_Test
     public class Test3
     {
         public static int s_val = 123;
+        public string str { get; private set; }
+        public static string str2 { get { return (s_val + 2).ToString(); }}
 
         public Action<int> act = x =>
         {
@@ -49,8 +52,11 @@ namespace NS_Test
         {
             val = 2000;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}..."); return x > 101; };
-            Debug.Log($"<color=yellow>x is OK:{f(val + 2)}</color>");
+            Debug.Log($"x is OK:{f(val + 2)}");
             Test2();
+            Debug.Log($"Test4.val={Test4.val} from Test()");
+            str = "be happy";
+            Debug.Log(str2);
         }
 
         public void Test2()
@@ -65,5 +71,10 @@ namespace NS_Test
             act(val1);
             return val2.name;
         }
+    }
+
+    public class Test4
+    {
+        public static int val = 2;
     }
 }

@@ -25,7 +25,7 @@ namespace ScriptHotReload
     {
         const string kHotReloadHookTag = "kScriptHotReload";
 
-        public static void DoHook(Dictionary<string, List<GenPatchAssemblies.MethodData>> methodsToHook)
+        public static void DoHook(Dictionary<string, List<MethodData>> methodsToHook)
         {
             HookPool.UninstallByData(kHotReloadHookTag);
 
