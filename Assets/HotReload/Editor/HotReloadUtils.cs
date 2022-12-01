@@ -43,6 +43,9 @@ namespace ScriptHotReload
 
         public static void RemoveAllFiles(string dir)
         {
+            if (!Directory.Exists(dir))
+                return;
+
             string[] files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
             foreach (var file in files)
                 File.Delete(file);
@@ -139,6 +142,11 @@ namespace ScriptHotReload
                     return mi;
             }
             return null;
+        }
+
+        public static bool IsLambdaBackend(TypeReference typeReference)
+        {
+            return typeReference.ToString().EndsWith(HotReloadConfig.kLambdaWrapperBackend, StringComparison.Ordinal);
         }
     }
 

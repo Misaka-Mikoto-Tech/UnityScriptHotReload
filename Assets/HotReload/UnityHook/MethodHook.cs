@@ -265,7 +265,7 @@ namespace MonoHook
 
             if(_replacementPtr == _targetPtr)
             {
-                throw new Exception("the addresses of target method and replacement method can not be same");
+                throw new Exception($"the addresses of target method {targetMethod.Name} and replacement method {replacementMethod.Name} can not be same");
             }
 
             if (LDasm.IsThumb(_targetPtr) || LDasm.IsThumb(_replacementPtr))

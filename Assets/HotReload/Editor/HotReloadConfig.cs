@@ -21,6 +21,11 @@ namespace ScriptHotReload
         public const string kPatchDllPathFormat = kTempScriptDir + "/{0}_{1}.dll"; // {0}:assNameNoExt, {1}:PatchNo
 
         public const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
+        /// <summary>
+        /// 类型内 lambda 表达式的封装类名称，不同版本Unity编译器生成的结果可能不同，待确认
+        /// </summary>
+        /// <remarks>注意：只修改lambda表达式，但不修改调用处代码，将不会被检测到改变</remarks>
+        public const string kLambdaWrapperBackend = "/<>c";
 
     }
 

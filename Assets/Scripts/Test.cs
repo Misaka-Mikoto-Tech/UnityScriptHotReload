@@ -50,13 +50,14 @@ namespace NS_Test
 
         public void Test(out int val)
         {
-            val = 2000;
+            val = 2;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}..."); return x > 101; };
             Debug.Log($"x is OK:{f(val + 2)}");
             Test2();
             Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
             Debug.Log(str2);
+            //Test3__();
         }
 
         public void Test2()
@@ -64,6 +65,11 @@ namespace NS_Test
             string assPath = new Action(Test2).Method.DeclaringType.Assembly.Location;
             Debug.Log($"location of current dll:{assPath}");
         }
+
+        //public void Test3__()
+        //{
+        //    Debug.Log("this is Test3__");
+        //}
 
         public string TestG<T>(out int val1, T val2) where T : UnityEngine.Object
         {
