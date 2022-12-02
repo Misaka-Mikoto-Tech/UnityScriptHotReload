@@ -308,7 +308,7 @@ namespace ScriptHotReload
         void FixNewAssembly()
         {
             // .net 不允许加载同名Assembly，因此需要改名
-            _newAssDef.Name.Name = $"{_baseAssDef.Name.Name}_{_patchNo}";
+            _newAssDef.Name.Name = string.Format(kPatchAssemblyName, _baseAssDef.Name.Name, _patchNo);
             _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
 
             Dictionary<string, MethodData> methodsToFix = new Dictionary<string, MethodData>(assemblyData.methodModified);
@@ -381,7 +381,6 @@ namespace ScriptHotReload
                         bool isLambda = IsLambdaStaticType(fieldType);
                         if (!isLambda && assemblyData.baseTypes.TryGetValue (fieldType.FullName, out TypeData baseTypeData))
                         {
-							//TypeReference typeReference = _newAssDef.MainModule.ImportReference (baseTypeData.definition);
 							if (baseTypeData.fields.TryGetValue (fieldDef.FullName, out FieldDefinition baseFieldDef))
 							{
 								var fieldRef = _newAssDef.MainModule.ImportReference (baseFieldDef);

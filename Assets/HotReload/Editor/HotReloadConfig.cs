@@ -14,12 +14,15 @@ namespace ScriptHotReload
             "Assembly-CSharp.dll"
         };
 
+        public const string kPatchAssemblyName = "{0}_patch_{1}";  // {0}:assNameNoExt, {1}:PatchNo
+
         public const string kTempScriptDir = "Temp/ScriptHotReload";
         public const string kTempCompileToDir = "Temp/ScriptHotReload/tmp";
         public const string kBuiltinAssembliesDir = "Library/ScriptAssemblies";
         public const string kLastDllPathFormat = kTempScriptDir + "/{0}__last.dll"; // {0}:assNameNoExt
-        public const string kPatchDllPathFormat = kTempScriptDir + "/{0}_{1}.dll"; // {0}:assNameNoExt, {1}:PatchNo
+        public const string kPatchDllPathFormat = kTempScriptDir + "/"+ kPatchAssemblyName +".dll";
 
+        
         public const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
         /// <summary>
         /// 类型内 lambda 表达式的封装类名称，代码修改后lambda表达式对应的函数名可能会发生改变，因此特殊处理
