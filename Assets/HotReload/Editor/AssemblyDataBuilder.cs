@@ -281,7 +281,6 @@ namespace ScriptHotReload
 
         void FillMethodInfoField()
         {
-			return;
             Assembly ass = (from ass_ in AppDomain.CurrentDomain.GetAssemblies() where ass_.FullName == assemblyData.name select ass_).FirstOrDefault();
             Debug.Assert(ass != null);
 
@@ -309,6 +308,7 @@ namespace ScriptHotReload
         {
             // .net 不允许加载同名Assembly，因此需要改名
             _newAssDef.Name.Name = string.Format(kPatchAssemblyName, _baseAssDef.Name.Name, _patchNo);
+            _newAssDef.MainModule.Name = _newAssDef.Name.Name + ".dll";
             _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
 
             Dictionary<string, MethodData> methodsToFix = new Dictionary<string, MethodData>(assemblyData.methodModified);
