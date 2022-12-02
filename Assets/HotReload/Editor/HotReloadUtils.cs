@@ -144,9 +144,19 @@ namespace ScriptHotReload
             return null;
         }
 
-        public static bool IsLambdaBackend(TypeReference typeReference)
+        public static bool IsLambdaStaticType(TypeReference typeReference)
         {
             return typeReference.ToString().EndsWith(HotReloadConfig.kLambdaWrapperBackend, StringComparison.Ordinal);
+        }
+
+        public static bool IsLambdaStaticType(string typeSignature)
+        {
+            return typeSignature.EndsWith(HotReloadConfig.kLambdaWrapperBackend, StringComparison.Ordinal);
+        }
+
+        public static bool IsLambdaMethod(MethodReference methodReference)
+        {
+            return methodReference.Name.StartsWith('<');
         }
     }
 

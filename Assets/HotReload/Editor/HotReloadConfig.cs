@@ -22,7 +22,7 @@ namespace ScriptHotReload
 
         public const string kEditorScriptBuildParamsKey = "kEditorScriptBuildParamsKey";
         /// <summary>
-        /// 类型内 lambda 表达式的封装类名称，不同版本Unity编译器生成的结果可能不同，待确认
+        /// 类型内 lambda 表达式的封装类名称，代码修改后lambda表达式对应的函数名可能会发生改变，因此特殊处理
         /// </summary>
         /// <remarks>注意：只修改lambda表达式，但不修改调用处代码，将不会被检测到改变</remarks>
         public const string kLambdaWrapperBackend = "/<>c";

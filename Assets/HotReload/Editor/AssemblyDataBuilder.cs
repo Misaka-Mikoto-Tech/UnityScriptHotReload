@@ -10,11 +10,31 @@ using Mono.Cecil;
 using System.Linq;
 using System.Text;
 using Mono.Cecil.Cil;
-using UnityEngine;
-using UnityEditor;
 
 using static ScriptHotReload.HotReloadUtils;
 using static ScriptHotReload.HotReloadConfig;
+
+#if UNITY_EDITOR
+using UnityEngine;
+using UnityEditor;
+#else
+class Debug {
+	public static void Log (string msg)
+	{
+		Console.WriteLine (msg);
+	}
+
+	public static void LogError (string msg)
+	{
+		Console.WriteLine (msg);
+	}
+
+	public static void Assert(bool condition)
+	{
+		System.Diagnostics.Debug.Assert (condition);
+	}
+}
+#endif
 
 namespace ScriptHotReload
 {
@@ -25,26 +45,32 @@ namespace ScriptHotReload
         public Dictionary<string, TypeData>     baseTypes       = new Dictionary<string, TypeData>();
         public Dictionary<string, TypeData>     newTypes        = new Dictionary<string, TypeData>();
         public Dictionary<string, MethodData>   allBaseMethods    = new Dictionary<string, MethodData>(); // 用于快速搜索
-        public List<MethodData>                 methodModified  = new List<MethodData>(); // new method data
+        public Dictionary<string, MethodData>   methodModified  = new Dictionary<string, MethodData>(); // new method data
     }
 
     public class TypeData
     {
         public TypeDefinition   definition;
         public Type             type;
+
+        public bool             isLambdaStaticType; // 名字为 `<>` 的类型
+        public TypeData         parent;
+        public TypeData         childLambdaStaticType; // TypeName/<>c
+
         public Dictionary<string, MethodData>           methods = new Dictionary<string, MethodData>();
         public Dictionary<string, FieldDefinition>      fields = new Dictionary<string, FieldDefinition>();
-        public Dictionary<string, PropertyDefinition>   staticProperties = new Dictionary<string, PropertyDefinition>();
     }
 
     public class MethodData
     {
+        public TypeData         typeData;
         public MethodDefinition definition;
         public MethodInfo       methodInfo;
+        public bool             isLambda;
 
-        public MethodData(MethodDefinition definition, MethodInfo methodInfo)
+        public MethodData(TypeData typeData, MethodDefinition definition, MethodInfo methodInfo, bool isLambda)
         {
-            this.definition = definition; this.methodInfo = methodInfo;
+            this.typeData = typeData; this.definition = definition; this.methodInfo = methodInfo; this.isLambda = isLambda;
         }
     }
 
@@ -78,17 +104,12 @@ namespace ScriptHotReload
             
             var baseTypes = _baseAssDef.MainModule.Types;
             var newTypes = _newAssDef.MainModule.Types;
-            if (baseTypes.Count != newTypes.Count)
-            {
-                Debug.LogError($"Assembly [{assemblyData.name}]'s type count changed dururing play mode, skiped");
-                return false;
-            }
 
             foreach (var t in baseTypes)
-                GenTypeInfos(t, assemblyData.baseTypes);
+                GenTypeInfos(t, null, assemblyData.baseTypes);
 
             foreach (var t in newTypes)
-                GenTypeInfos(t, assemblyData.newTypes);
+                GenTypeInfos(t, null, assemblyData.newTypes);
 
             FillAllBaseMethods();
 
@@ -104,12 +125,18 @@ namespace ScriptHotReload
             return isValid;
         }
 
-        public void GenTypeInfos(TypeDefinition typeDefinition, Dictionary<string, TypeData> types)
+        public void GenTypeInfos(TypeDefinition typeDefinition, TypeData parent, Dictionary<string, TypeData> types)
         {
             TypeData typeData = new TypeData();
             typeData.definition = typeDefinition;
+            typeData.parent = parent;
+            
             string sig = typeDefinition.ToString();
+            typeData.isLambdaStaticType = IsLambdaStaticType(sig);
             types.Add(sig, typeData);
+
+            if (typeData.isLambdaStaticType)
+                parent.childLambdaStaticType = typeData;
 
             foreach (var method in typeDefinition.Methods)
             {
@@ -117,7 +144,7 @@ namespace ScriptHotReload
                     continue;
 
                 // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
-                typeData.methods.Add(method.ToString(), new MethodData(method, null));
+                typeData.methods.Add(method.ToString(), new MethodData(typeData, method, null, IsLambdaMethod(method)));
             }
 
             foreach(var field in typeDefinition.Fields)
@@ -127,7 +154,7 @@ namespace ScriptHotReload
 
             foreach(var nest in typeDefinition.NestedTypes)
             {
-                GenTypeInfos(nest, types);
+                GenTypeInfos(nest, typeData, types);
             }
         }
 
@@ -158,7 +185,8 @@ namespace ScriptHotReload
                     return false;
                 }
 
-                bool isLambdaBackend = typeName.EndsWith(kLambdaWrapperBackend, StringComparison.Ordinal);
+                if(IsLambdaStaticType(typeName))
+                    continue; // 名称为 `<>` 的存储不包含外部引用的lambda函数的类型，内部只有静态字段, 由于我们不对其hook，因此内存布局不予考虑
 
                 var baseFields = baseType.definition.Fields.ToArray();
                 var newFields = newType.definition.Fields.ToArray();
@@ -171,27 +199,10 @@ namespace ScriptHotReload
                 {
                     var baseField = baseFields[i];
                     var newField = newFields[i];
-                    if(!isLambdaBackend)
+                    if (baseField.ToString() != newField.ToString())
                     {
-                        if (baseField.ToString() != newField.ToString())
-                        {
-                            Debug.LogError($"field `{baseField}` changed of type:{typeName}");
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        // lambda wrapper 自动生成的代码只判断类型（因为其编号是类函数总数量，新增函数后编号会变化）
-                        if(baseField.FieldType.ToString() != newField.FieldType.ToString())
-                        {
-                            Debug.LogError($"lambda expression `{baseField}` signature changed of type:{typeName}");
-                            return false;
-                        }
-                        else
-                        {
-                            // 修正 newAssembly 中的lambda映射关系
-
-                        }
+                        Debug.LogError($"field `{baseField}` changed of type:{typeName}");
+                        return false;
                     }
                 }
             }
@@ -205,8 +216,8 @@ namespace ScriptHotReload
             foreach(var kvT in assemblyData.baseTypes)
             {
                 string typeName = kvT.Key;
-                // TODO lambda 表达式在新增类函数后自动编号会发生变化，暂时没有合适的匹配方法(如果不打算新增函数可以注释掉此判断语句)
-                if (typeName.EndsWith(kLambdaWrapperBackend, StringComparison.Ordinal))
+                // lambda 表达式在新增类函数后自动编号会发生变化，并且我们不打算hook，因此跳过
+                if (IsLambdaStaticType(typeName))
                     continue;
 
                 TypeData baseType = kvT.Value;
@@ -230,7 +241,10 @@ namespace ScriptHotReload
                 {
                     string methodName = kvM.Key;
                     MethodData baseMethod = kvM.Value;
-                    if(!newMethods.TryGetValue(methodName, out MethodData newMethod))
+                    if (IsLambdaMethod(baseMethod.definition)) // <MethodName>b_xx_y
+                        continue;
+
+                    if (!newMethods.TryGetValue(methodName, out MethodData newMethod))
                     {
                         Debug.LogError($"can not find method `{methodName}` in new assembly[{assemblyData.name}]");
                         return false;
@@ -258,32 +272,35 @@ namespace ScriptHotReload
                     }
 
                     if (hasModified)
-                        assemblyData.methodModified.Add(newMethod);
+                        assemblyData.methodModified.Add(methodName, newMethod);
                 }
             }
+
             return true;
         }
 
         void FillMethodInfoField()
         {
+			return;
             Assembly ass = (from ass_ in AppDomain.CurrentDomain.GetAssemblies() where ass_.FullName == assemblyData.name select ass_).FirstOrDefault();
             Debug.Assert(ass != null);
 
             Dictionary<TypeDefinition, Type> dicType = new Dictionary<TypeDefinition, Type>();
-            foreach (var md in assemblyData.methodModified)
+            foreach (var kv in assemblyData.methodModified)
             {
+                MethodData methodData = kv.Value;
                 Type t;
-                MethodDefinition definition = md.definition;
+                MethodDefinition definition = methodData.definition;
                 if (!dicType.TryGetValue(definition.DeclaringType, out t))
                 {
                     t = ass.GetType(definition.DeclaringType.FullName);
                     Debug.Assert(t != null);
                     dicType.Add(definition.DeclaringType, t);
                 }
-                md.methodInfo = GetMethodInfoSlow(t, definition);
-                if (md.methodInfo == null)
+                methodData.methodInfo = GetMethodInfoSlow(t, definition);
+                if (methodData.methodInfo == null)
                 {
-                    Debug.LogError($"can not find MethodInfo of [{md.definition.FullName}]");
+                    Debug.LogError($"can not find MethodInfo of [{methodData.definition.FullName}]");
                 }
             }
         }
@@ -294,10 +311,37 @@ namespace ScriptHotReload
             _newAssDef.Name.Name = $"{_baseAssDef.Name.Name}_{_patchNo}";
             _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
 
-            HashSet<MethodDefinition> processed = new HashSet<MethodDefinition>();
-            foreach (var methodData in assemblyData.methodModified)
+            Dictionary<string, MethodData> methodsToFix = new Dictionary<string, MethodData>(assemblyData.methodModified);
+
+            /*
+             * 被修改的函数所在的类型的 lambda 成员函数及 lambda static type 子类里的所有方法也一并修正，避免 lambda 表达式内的外部调用跑出范围
+             * FixMethod 解析IL时遇到lambda表达式时也会递归，但无法递归到IL未访问的 lambda 表达式，因此此处将其提前加入列表
+             */
+            var oriMethods = methodsToFix.Values.ToArray();
+            foreach(var method in oriMethods)
             {
-                FixMethod(methodData.definition, processed);
+                TypeData typeData = method.typeData;
+                foreach(var kvM in typeData.methods)
+                {
+                    if(IsLambdaMethod(kvM.Value.definition))
+						if(!methodsToFix.ContainsKey(kvM.Key))
+							methodsToFix.Add(kvM.Key, kvM.Value);
+                }
+
+                if(typeData.childLambdaStaticType != null)
+                {
+                    foreach (var kvM in typeData.childLambdaStaticType.methods)
+                    {
+						if (!methodsToFix.ContainsKey (kvM.Key))
+							methodsToFix.Add(kvM.Key, kvM.Value);
+                    }
+                }
+            }
+
+            HashSet<MethodDefinition> processed = new HashSet<MethodDefinition>();
+            foreach (var kv in methodsToFix)
+            {
+                FixMethod(kv.Value.definition, processed);
             }
         }
 
@@ -314,6 +358,7 @@ namespace ScriptHotReload
                 processed.Add(definition);
 
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
+
             var arrIns = definition.Body.Instructions.ToArray();
             var ilProcessor = definition.Body.GetILProcessor ();
 
@@ -325,24 +370,29 @@ namespace ScriptHotReload
                     /*
                      * Field 有两种类型: FieldReference/FieldDefinition, 经过研究发现 FieldReference 指向了外部 Assembly, 而 FieldDefinition 则是当前 Assembly 内定义的
                      * 因此我们只需要检查 FieldDefinition, 然后把它们替换成同名的 FieldReference
-                     * Method 同理
+                     * Method 同理, 但 lambda 表达式不进行替换，而是递归修正函数
                      */
                     if (ins.Operand is FieldDefinition)
                     {
                         var fieldDef = ins.Operand as FieldDefinition;
-                        if (!fieldDef.IsStatic) break;
-                        if (fieldDef.DeclaringType.Module != _newAssDef.MainModule) break;
+                        var fieldType = fieldDef.DeclaringType;
+                        if (fieldType.Module != _newAssDef.MainModule) break;
 
-                        bool isLambda = IsLambdaBackend(fieldDef.DeclaringType);
-                        if (!isLambda && assemblyData.baseTypes.TryGetValue (fieldDef.FullName, out TypeData baseTypeData))
+                        bool isLambda = IsLambdaStaticType(fieldType);
+                        if (!isLambda && assemblyData.baseTypes.TryGetValue (fieldType.FullName, out TypeData baseTypeData))
                         {
-                            _newAssDef.MainModule.ImportReference(baseTypeData.definition);
-                            var newIns = Instruction.Create (ins.OpCode, baseTypeData.definition);
-                            ilProcessor.Replace (ins, newIns);
+							//TypeReference typeReference = _newAssDef.MainModule.ImportReference (baseTypeData.definition);
+							if (baseTypeData.fields.TryGetValue (fieldDef.FullName, out FieldDefinition baseFieldDef))
+							{
+								var fieldRef = _newAssDef.MainModule.ImportReference (baseFieldDef);
+								var newIns = Instruction.Create (ins.OpCode, fieldRef);
+								ilProcessor.Replace (ins, newIns);
+							} else
+								throw new Exception ($"can not find field {fieldDef.FullName} in base dll");
                         } else
                         {
                             // 新定义的类型或者lambda, 可以使用新的Assembly内的定义, 但需要递归修正其中的方法
-                            if(assemblyData.newTypes.TryGetValue(definition.ToString(), out TypeData typeData))
+                            if(assemblyData.newTypes.TryGetValue(fieldType.ToString(), out TypeData typeData))
                             {
                                 foreach(var kv in typeData.methods)
                                 {
@@ -354,20 +404,20 @@ namespace ScriptHotReload
                     else if(ins.Operand is MethodDefinition)
                     {
                         var methodDef = ins.Operand as MethodDefinition;
-                        bool isLambda = IsLambdaBackend(methodDef.DeclaringType);
+						bool isLambda = IsLambdaMethod (methodDef);
                         if (!isLambda && assemblyData.allBaseMethods.TryGetValue(methodDef.ToString(), out MethodData baseMethodDef))
                         {
-                            _newAssDef.MainModule.ImportReference(baseMethodDef.definition.DeclaringType);
-                            var newIns = Instruction.Create (ins.OpCode, baseMethodDef.definition);
+                            var reference = _newAssDef.MainModule.ImportReference(baseMethodDef.definition);
+                            var newIns = Instruction.Create (ins.OpCode, reference);
                             ilProcessor.Replace (ins, newIns);
                         }
-                        else // 这是新定义的方法或者lambda表达式，需要递归检查
+                        else // 这是新定义的方法或者lambda表达式，需要递归修正
                         {
                             FixMethod (methodDef, processed); // TODO 当object由非hook代码创建时调用新添加的虚方法可能有问题
                         }
                     }
                 }
-                while (false) ;
+                while (false);
                 
             }
         }

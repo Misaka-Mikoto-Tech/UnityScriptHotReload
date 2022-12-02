@@ -67,6 +67,7 @@ namespace ScriptHotReload
                     return;
                 }
 
+                // TODO copy pdb files
                 if (!File.Exists(lastDll))
                     File.Copy(baseDll, lastDll);
 
@@ -76,9 +77,10 @@ namespace ScriptHotReload
                 string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
                 newAssDef.Write(patchDll);
 
-                methodsToHook.Add(assName, assBuilder.assemblyData.methodModified);
+                methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
             }
-
+            GC.Collect();
+            
             if(methodsToHook.Count == 0)
             {
                 Debug.Log("代码没有发生改变，不执行热重载");
