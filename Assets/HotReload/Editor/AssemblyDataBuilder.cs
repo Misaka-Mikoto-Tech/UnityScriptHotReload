@@ -158,7 +158,8 @@ namespace ScriptHotReload
 
             foreach (var method in typeDefinition.Methods)
             {
-                if (method.IsAbstract || !method.HasBody)
+                // 静态构造函数不允许被hook，否则静态构造函数会被自动再次执行导致数据错误
+                if (method.IsAbstract || !method.HasBody || method.Name.Contains(".cctor"))
                     continue;
 
                 // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
