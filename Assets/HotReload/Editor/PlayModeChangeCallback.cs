@@ -47,14 +47,14 @@ namespace ScriptHotReload
                         CompileScript.ResetCompileStatus();
                         if (GenPatchAssemblies.codeHasChanged)
                         {
-                            AssetDatabase.Refresh();
+                            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
                             EditorCompilationWrapper.RequestScriptCompilation("运行过程中代码被修改");
                         }
                         break;
                     }
                 case PlayModeStateChange.EnteredEditMode:
                     {
-                        HotReloadUtils.RemoveAllFiles(kTempScriptDir); // TODO 改成调用 cmd 延迟删除，否则会提示占用
+                        // HotReloadUtils.RemoveAllFiles(kTempScriptDir); // TODO 改成调用 cmd 延迟删除，否则会提示占用
                         break;
                     }
             }

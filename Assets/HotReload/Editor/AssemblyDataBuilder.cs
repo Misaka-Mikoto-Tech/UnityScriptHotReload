@@ -13,6 +13,9 @@ using Mono.Cecil.Cil;
 
 using static ScriptHotReload.HotReloadUtils;
 using static ScriptHotReload.HotReloadConfig;
+using System.Security.Permissions;
+using SecurityAction = System.Security.Permissions.SecurityAction;
+using Unity.VisualScripting;
 
 #if UNITY_EDITOR
 using UnityEngine;
@@ -35,6 +38,13 @@ class Debug {
 	}
 }
 #endif
+
+/*
+ * 安全相关特性，如果生成的patch dll出现 xx 字段/方法 `FieldAccessException` 异常，可以根据当前运行时开放下列其中之一
+ * 
+ * [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)] // for mono and .net framework < 4.0
+ * [assembly: IgnoresAccessChecksTo("TestDll")] // for .net core, and pls modify assembly name
+ */
 
 namespace ScriptHotReload
 {
@@ -85,6 +95,10 @@ namespace ScriptHotReload
         private AssemblyDefinition _baseAssDef;
         private AssemblyDefinition _newAssDef;
         private int _patchNo;
+
+#if SCRIPT_PATCH_DEBUG
+        StringBuilder sbDebug = new StringBuilder();
+#endif
 
         public AssemblyDataBuilder(AssemblyDefinition baseAssDef, AssemblyDefinition newAssDef)
         {
@@ -304,12 +318,34 @@ namespace ScriptHotReload
             }
         }
 
+        
         void FixNewAssembly()
         {
+#if SCRIPT_PATCH_DEBUG
+            sbDebug.Clear();
+#endif
             // .net 不允许加载同名Assembly，因此需要改名
             _newAssDef.Name.Name = string.Format(kPatchAssemblyName, _baseAssDef.Name.Name, _patchNo);
+            {
+                var ver = _newAssDef.Name.Version;
+                ver = new Version(ver.Major, ver.Minor, ver.Build, ver.Revision + _patchNo);
+                _newAssDef.Name.Version = ver;
+            }
+
             _newAssDef.MainModule.Name = _newAssDef.Name.Name + ".dll";
+            _newAssDef.MainModule.Mvid = Guid.NewGuid();
+            
             _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
+
+            {// 给Assembly添加Attribute以允许IL访问外部类的私有字段
+                using(var editorAssemDef = AssemblyDefinition.ReadAssembly(MethodBase.GetCurrentMethod().DeclaringType.Assembly.Location))
+                {
+                    // 使用当前 editor dll的 security attributes 替换目标数据（构造这些数据太复杂，editor dll 我们可以提前定义模板）
+                    _newAssDef.SecurityDeclarations.Clear();
+                    _newAssDef.SecurityDeclarations.AddRange(editorAssemDef.SecurityDeclarations);
+                    // TODO for .net core, modify assembly name of `IgnoresAccessChecksTo` with code
+                }
+            }
 
             Dictionary<string, MethodData> methodsToFix = new Dictionary<string, MethodData>(assemblyData.methodModified);
 
@@ -341,8 +377,12 @@ namespace ScriptHotReload
             HashSet<MethodDefinition> processed = new HashSet<MethodDefinition>();
             foreach (var kv in methodsToFix)
             {
-                FixMethod(kv.Value.definition, processed);
+                FixMethod(kv.Value.definition, processed, 0);
             }
+
+#if SCRIPT_PATCH_DEBUG
+            Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sbDebug.ToString()}");
+#endif
         }
 
         /// <summary>
@@ -350,13 +390,22 @@ namespace ScriptHotReload
         /// </summary>
         /// <param name="definition"></param>
         /// <param name="processed"></param>
-        void FixMethod(MethodDefinition definition, HashSet<MethodDefinition> processed)
+        void FixMethod(MethodDefinition definition, HashSet<MethodDefinition> processed, int depth)
         {
             if (processed.Contains(definition))
                 return;
             else
+            {
                 processed.Add(definition);
-
+#if SCRIPT_PATCH_DEBUG
+                var sig = definition.ToString();
+                if(assemblyData.methodModified.ContainsKey(sig))
+                    sbDebug.AppendLine(sig + "  [Hook]");
+                else
+                    sbDebug.AppendLine(sig);
+#endif
+            }
+                
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
 
             var arrIns = definition.Body.Instructions.ToArray();
@@ -395,7 +444,7 @@ namespace ScriptHotReload
                             {
                                 foreach(var kv in typeData.methods)
                                 {
-                                    FixMethod(kv.Value.definition, processed);
+                                    FixMethod(kv.Value.definition, processed, depth + 1);
                                 }
                             }
                         }
@@ -409,10 +458,18 @@ namespace ScriptHotReload
                             var reference = _newAssDef.MainModule.ImportReference(baseMethodDef.definition);
                             var newIns = Instruction.Create (ins.OpCode, reference);
                             ilProcessor.Replace (ins, newIns);
+                            if(depth < 1)
+                            {
+                                /*
+                                 * 被Hook的函数被调用时，即使IP已跳转到新的地址，但VM还是认为当前的函数栈位于原函数内，其Assembly也识别为原始dll
+                                 * 因此其内直接调用的函数无论是否发生改变均需要执行修正
+                                 */
+                                FixMethod(methodDef, processed, depth + 1);
+                            }
                         }
                         else // 这是新定义的方法或者lambda表达式，需要递归修正
                         {
-                            FixMethod (methodDef, processed); // TODO 当object由非hook代码创建时调用新添加的虚方法可能有问题
+                            FixMethod (methodDef, processed, depth + 1); // TODO 当object由非hook代码创建时调用新添加的虚方法可能有问题
                         }
                     }
                 }
