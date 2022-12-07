@@ -27,7 +27,7 @@ namespace ScriptHotReload
 
         public static void DoHook(Dictionary<string, List<MethodData>> methodsToHook)
         {
-            HookPool.UninstallByData(kHotReloadHookTag);
+            HookPool.UninstallByTag(kHotReloadHookTag);
 
             foreach(var kv in methodsToHook)
             {
@@ -42,11 +42,11 @@ namespace ScriptHotReload
 
                 foreach(var data in kv.Value)
                 {
-                    MethodInfo miTarget = data.methodInfo;
+                    MethodBase miTarget = data.methodInfo;
                     if (miTarget.IsGenericMethod) // 泛型暂时不处理
                         continue;
 
-                    MethodInfo miReplace = GetMethodFromAssembly(miTarget, patchAssembly);
+                    MethodBase miReplace = GetMethodFromAssembly(miTarget, patchAssembly);
                     if(miReplace == null)
                     {
                         Debug.LogError($"can not find method `{miTarget}` in [{assName}]");

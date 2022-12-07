@@ -75,7 +75,7 @@ namespace ScriptHotReload
     {
         public TypeData         typeData;
         public MethodDefinition definition;
-        public MethodInfo       methodInfo;
+        public MethodBase       methodInfo;
         public bool             isLambda;
 
         public MethodData(TypeData typeData, MethodDefinition definition, MethodInfo methodInfo, bool isLambda)
@@ -158,7 +158,7 @@ namespace ScriptHotReload
 
             foreach (var method in typeDefinition.Methods)
             {
-                if (method.IsAbstract || !method.HasBody || method.Name.Contains(".cctor")) // 静态构造函数只会被执行一次，hook没有意义
+                if (method.IsAbstract || !method.HasBody)
                     continue;
 
                 // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties

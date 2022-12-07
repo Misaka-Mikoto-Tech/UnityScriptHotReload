@@ -21,7 +21,7 @@ public class Test : MonoBehaviour
         Debug.Log($"Test3.s_val={NS_Test.Test3.s_val}");
 
         var test = new NS_Test.Test3();
-        test.Test(out int val);
+        test.FuncA(out int val);
         Debug.Log($"OnBtnTest:val={val}");
 
         Debug.Log($"Test3.s_val={NS_Test.Test3.s_val}");

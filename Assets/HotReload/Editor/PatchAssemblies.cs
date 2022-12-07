@@ -46,6 +46,7 @@ namespace ScriptHotReload
             if (status != CompileStatus.Idle)
                 return;
 
+            methodsToHook.Clear();
             foreach(string assName in hotReloadAssemblies)
             {
                 string assNameNoExt = Path.GetFileNameWithoutExtension(assName);

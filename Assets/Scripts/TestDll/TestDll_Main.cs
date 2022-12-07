@@ -11,9 +11,24 @@ namespace NS_Test
 {
     public unsafe class Test3
     {
+        private class InnerTest
+        {
+            public int innerX;
+            public void FuncInnerA(int val)
+            {
+#if !APPLY_PATCH
+                Debug.Log($"<color=yellow>FuncInnerA:</color> {innerX + val}");
+#else
+                Debug.Log($"<color=yellow>FuncInnerA: patched</color> {innerX + val + 1}");
+#endif
+            }
+        }
+
         public static int s_val = 123;
         public string str { get; set; } = "default str";
         public static string str2 { get { return (s_val + 2).ToString(); } }
+
+        private InnerTest _innerTest = new InnerTest();
 
         public Action<int> act = x =>
         {
@@ -28,36 +43,55 @@ namespace NS_Test
             Debug.Log(str2);
         };
 
+        public void Init()
+        {
+            _innerTest.innerX = 10;
+        }
+
 #if !APPLY_PATCH
-        public void Test(out int val)
+        static Test3()
+        {
+            Debug.Log("static constructor");
+        }
+
+        public void FuncA(out int val)
         {
             val = 2;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
             Debug.Log($"x is OK:{f(val + 2)}");
-            Test2();
-            Test3__();
+            TestB();
+            TestC();
             Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
             Debug.Log(str2);
+
+            _innerTest.FuncInnerA(5);
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 #else
-        public void Test(out int val)
+        static Test3()
+        {
+            Debug.Log("static constructor patched");
+        }
+
+        public void FuncA(out int val)
         {
             val = 2000;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
             Debug.Log($"x is OK:{f(val + 2)}");
-            Test2();
-            Test3__();
+            TestB();
+            TestC();
             Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
             Debug.Log(str2);
-            TestNew();
+            FuncNew();
+
+            _innerTest.FuncInnerA(5);
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
-        public void TestNew()
+        public void FuncNew()
         {
             //Func<int, bool> f2 = (int x) => { Debug.Log($"{x + 1} $$$ {str}..."); return x > 100; };
             //Func<int, bool> f3 = (int x) => { Debug.Log($"{x + 1}@@@"); return x > 200; };
@@ -67,15 +101,15 @@ namespace NS_Test
         }
 #endif
 
-        public void Test2()
+        public void TestB()
         {
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 
-        public void Test3__()
+        public void TestC()
         {
             PrintMethodLocation(MethodBase.GetCurrentMethod());
-            Test2();
+            TestB();
         }
 
         [MethodImpl(MethodImplOptions.NoOptimization)]

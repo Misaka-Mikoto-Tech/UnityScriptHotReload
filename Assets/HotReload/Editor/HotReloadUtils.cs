@@ -7,6 +7,7 @@ using System;
 using System.Reflection;
 using Mono.Cecil;
 using UnityEditor;
+using Unity.VisualScripting;
 
 namespace ScriptHotReload
 {
@@ -67,7 +68,7 @@ namespace ScriptHotReload
             return flags;
         }
 
-        public static BindingFlags BuildBindingFlags(MethodInfo methodInfo)
+        public static BindingFlags BuildBindingFlags(MethodBase methodInfo)
         {
             BindingFlags flags = BindingFlags.Default;
             if (methodInfo.IsPublic)
@@ -90,13 +91,27 @@ namespace ScriptHotReload
         /// <param name="definition"></param>
         /// <returns></returns>
         /// <remarks>TODO 优化性能</remarks>
-        public static MethodInfo GetMethodInfoSlow(Type t, MethodDefinition definition)
+        public static MethodBase GetMethodInfoSlow(Type t, MethodDefinition definition)
         {
-            MethodInfo[] mis = t.GetMethods(BuildBindingFlags(definition));
+            var flags = BuildBindingFlags(definition);
+            bool isConstructor = definition.IsConstructor;
+            MethodBase[] mis;
+            if (isConstructor)
+                mis = t.GetConstructors(flags);
+            else
+                mis = t.GetMethods(flags);
+
             ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
             foreach(var mi in mis)
             {
-                if (mi.ReturnType.FullName != definition.ReturnType.FullName)
+                if (!isConstructor)
+                {
+                    if (mi.Name != definition.Name)
+                        continue;
+                    if ((mi as MethodInfo).ReturnType.FullName != definition.ReturnType.FullName)
+                        continue;
+                }
+                else if (mi.IsStatic != definition.IsStatic)
                     continue;
 
                 ParameterInfo[] piArr = mi.GetParameters();
@@ -124,18 +139,23 @@ namespace ScriptHotReload
         /// <summary>
         /// 从指定Assembly中查找特定签名的方法
         /// </summary>
-        /// <param name="methodInfo"></param>
+        /// <param name="methodBase"></param>
         /// <param name="assembly"></param>
         /// <returns></returns>
-        public static MethodInfo GetMethodFromAssembly(MethodInfo methodInfo, Assembly assembly)
+        public static MethodBase GetMethodFromAssembly(MethodBase methodBase, Assembly assembly)
         {
-            string typeName = methodInfo.DeclaringType.FullName;
+            string typeName = methodBase.DeclaringType.FullName;
             Type t = assembly.GetType(typeName);
             if (t == null)
                 return null;
 
-            string methodSig = methodInfo.ToString();
-            MethodInfo[] mis = t.GetMethods(BuildBindingFlags(methodInfo));
+            var flags = BuildBindingFlags(methodBase);
+            string methodSig = methodBase.ToString();
+            MethodBase[] mis;
+            if(methodBase.IsConstructor || methodBase.Name == ".cctor")
+                mis = t.GetConstructors(flags);
+            else
+                mis = t.GetMethods(flags);
             foreach(var mi in mis)
             {
                 if (mi.ToString() == methodSig)
