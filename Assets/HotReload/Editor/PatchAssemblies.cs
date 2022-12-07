@@ -57,8 +57,9 @@ namespace ScriptHotReload
                 if (IsFilesEqual(newDll, lastDll))
                     continue;
 
-                using var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll);
-                using var newAssDef = AssemblyDefinition.ReadAssembly(newDll);
+                ReaderParameters param = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true };
+                using var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, param);
+                using var newAssDef = AssemblyDefinition.ReadAssembly(newDll, param);
 
                 var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
                 if (!assBuilder.DoBuild(patchNo))
@@ -76,6 +77,7 @@ namespace ScriptHotReload
 
                 string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
                 newAssDef.Write(patchDll);
+                File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
 
                 methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
             }

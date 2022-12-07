@@ -97,7 +97,11 @@ namespace ScriptHotReload
         private int _patchNo;
 
 #if SCRIPT_PATCH_DEBUG
-        StringBuilder sbDebug = new StringBuilder();
+        class DebugMsg
+        {
+            public string msg;
+        }
+        List<DebugMsg> lstDebug = new List<DebugMsg>();
 #endif
 
         public AssemblyDataBuilder(AssemblyDefinition baseAssDef, AssemblyDefinition newAssDef)
@@ -322,7 +326,7 @@ namespace ScriptHotReload
         void FixNewAssembly()
         {
 #if SCRIPT_PATCH_DEBUG
-            sbDebug.Clear();
+            lstDebug.Clear();
 #endif
             // .net 不允许加载同名Assembly，因此需要改名
             _newAssDef.Name.Name = string.Format(kPatchAssemblyName, _baseAssDef.Name.Name, _patchNo);
@@ -381,7 +385,14 @@ namespace ScriptHotReload
             }
 
 #if SCRIPT_PATCH_DEBUG
-            Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sbDebug.ToString()}");
+            if(lstDebug.Count > 0)
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (var msg in lstDebug)
+                    sb.AppendLine(msg.msg);
+                Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sb.ToString()}");
+            }
+                
 #endif
         }
 
@@ -392,20 +403,30 @@ namespace ScriptHotReload
         /// <param name="processed"></param>
         void FixMethod(MethodDefinition definition, HashSet<MethodDefinition> processed, int depth)
         {
+#if SCRIPT_PATCH_DEBUG
+            bool hasFixed = false;
+            var dbgMsg = new DebugMsg();
             if (processed.Contains(definition))
                 return;
             else
             {
                 processed.Add(definition);
-#if SCRIPT_PATCH_DEBUG
+
                 var sig = definition.ToString();
-                if(assemblyData.methodModified.ContainsKey(sig))
-                    sbDebug.AppendLine(sig + "  [Hook]");
+                if (assemblyData.methodModified.ContainsKey(sig))
+                    dbgMsg.msg = sig + "  [Hook]";
                 else
-                    sbDebug.AppendLine(sig);
-#endif
+                    dbgMsg.msg = sig;
+
+                lstDebug.Add(dbgMsg);
             }
-                
+#else
+            if (processed.Contains(definition))
+                return;
+            else
+                processed.Add(definition);
+#endif
+
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
 
             var arrIns = definition.Body.Instructions.ToArray();
@@ -435,7 +456,10 @@ namespace ScriptHotReload
 								var fieldRef = _newAssDef.MainModule.ImportReference (baseFieldDef);
 								var newIns = Instruction.Create (ins.OpCode, fieldRef);
 								ilProcessor.Replace (ins, newIns);
-							} else
+#if SCRIPT_PATCH_DEBUG
+                                hasFixed = true;
+#endif
+                            } else
 								throw new Exception ($"can not find field {fieldDef.FullName} in base dll");
                         } else
                         {
@@ -458,6 +482,9 @@ namespace ScriptHotReload
                             var reference = _newAssDef.MainModule.ImportReference(baseMethodDef.definition);
                             var newIns = Instruction.Create (ins.OpCode, reference);
                             ilProcessor.Replace (ins, newIns);
+#if SCRIPT_PATCH_DEBUG
+                            hasFixed = true;
+#endif
                             if(depth < 1)
                             {
                                 /*
@@ -476,6 +503,11 @@ namespace ScriptHotReload
                 while (false);
                 
             }
+
+#if SCRIPT_PATCH_DEBUG
+            if (hasFixed)
+                dbgMsg.msg += " [Fix]";
+#endif
         }
     }
 

@@ -3,9 +3,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using UnityEngine;
 
 namespace NS_Test
 {
@@ -18,27 +18,27 @@ namespace NS_Test
         public Action<int> act = x =>
         {
             x += 2;
-            Console.WriteLine(x * 3);
+            Debug.Log(x * 3);
         };
 
         public Action<int> act2 = x =>
         {
             x += 2;
-            Console.WriteLine(x * 3);
-            Console.WriteLine(str2);
+            Debug.Log(x * 3);
+            Debug.Log(str2);
         };
 
 #if !APPLY_PATCH
         public void Test(out int val)
         {
             val = 2;
-            Func<int, bool> f = (int x) => { Console.WriteLine($"{x + 1}-{str}..."); return x > 101; };
-            Console.WriteLine($"x is OK:{f(val + 2)}");
+            Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
+            Debug.Log($"x is OK:{f(val + 2)}");
             Test2();
             Test3__();
-            Console.WriteLine($"Test4.val={Test4.val} from Test()");
+            Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
-            Console.WriteLine(str2);
+            Debug.Log(str2);
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
@@ -46,22 +46,22 @@ namespace NS_Test
         public void Test(out int val)
         {
             val = 2000;
-            Func<int, bool> f = (int x) => { Console.WriteLine($"{x + 1}-{str}..."); return x > 101; };
-            Console.WriteLine($"x is OK:{f(val + 2)}");
+            Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
+            Debug.Log($"x is OK:{f(val + 2)}");
             Test2();
             Test3__();
-            Console.WriteLine($"Test4.val={Test4.val} from Test()");
+            Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
-            Console.WriteLine(str2);
+            Debug.Log(str2);
             TestNew();
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
         public void TestNew()
         {
-            //Func<int, bool> f2 = (int x) => { Console.WriteLine($"{x + 1} $$$ {str}..."); return x > 100; };
-            //Func<int, bool> f3 = (int x) => { Console.WriteLine($"{x + 1}@@@"); return x > 200; };
-            //Console.WriteLine("this is Test3__" + f2(456));
+            //Func<int, bool> f2 = (int x) => { Debug.Log($"{x + 1} $$$ {str}..."); return x > 100; };
+            //Func<int, bool> f3 = (int x) => { Debug.Log($"{x + 1}@@@"); return x > 200; };
+            //Debug.Log("this is Test3__" + f2(456));
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
@@ -69,7 +69,6 @@ namespace NS_Test
 
         public void Test2()
         {
-            // 由于mono的栈帧判断机制，此函数直接被 Test 调用时使用 patch dll 内的定义，套一层时使用原始dll内的定义
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 
@@ -83,7 +82,7 @@ namespace NS_Test
         void PrintMethodLocation(MethodBase method)
         {
             string assPath = method.DeclaringType.Assembly.Location;
-            Console.WriteLine($"location `<color=yellow>{method.Name}</color>` of current dll: <color=yellow>{assPath.Replace('\\', '/')}</color>");
+            Debug.Log($"location `<color=yellow>{method.Name}</color>` of current dll: <color=yellow>{assPath.Replace('\\', '/')}</color>");
         }
     }
 
