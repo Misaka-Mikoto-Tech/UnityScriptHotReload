@@ -392,13 +392,12 @@ namespace ScriptHotReload
                 }
             }
 
-            // 新增类的静态构造函数是第一次调用，因此需要Fix而不是Remove
+            // 新增类的函数全部需要被修正，包括静态构造函数，因为其静态构造函数是第一次调用，需要Fix而不是Remove
             foreach(var kvT in assemblyData.addedTypes)
             {
                 foreach(var kvM in kvT.Value.methods)
                 {
-                    var def = kvM.Value.definition;
-                    if (def.IsConstructor && def.IsStatic)
+                    if (!methodsToFix.ContainsKey(kvM.Key))
                         methodsToFix.Add(kvM.Key, kvM.Value);
                 }
             }
@@ -472,9 +471,13 @@ namespace ScriptHotReload
                 fixStatus.needHook = true;
 
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
-            var ilProcessor = definition.Body.GetILProcessor ();
-            foreach(var ins in definition.Body.Instructions)
+
+            var arrIns = definition.Body.Instructions.ToArray();
+            var ilProcessor = definition.Body.GetILProcessor();
+
+            for (int i = 0, imax = arrIns.Length; i < imax; i++)
             {
+                Instruction ins = arrIns[i];
                 do
                 {
                     /*
