@@ -4,8 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System;
-using System.Reflection.Emit;
-using Mono;
 using Mono.Cecil;
 using System.Linq;
 using System.Text;
@@ -16,6 +14,7 @@ using static ScriptHotReload.HotReloadConfig;
 using System.Security.Permissions;
 using SecurityAction = System.Security.Permissions.SecurityAction;
 using Unity.VisualScripting;
+using OpCodes = Mono.Cecil.Cil.OpCodes;
 
 #if UNITY_EDITOR
 using UnityEngine;
@@ -39,12 +38,6 @@ class Debug {
 }
 #endif
 
-/*
- * 安全相关特性，如果生成的patch dll出现 xx 字段/方法 `FieldAccessException` 异常，可以根据当前运行时开放下列其中之一
- * 
- * [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)] // for mono and .net framework < 4.0
- * [assembly: IgnoresAccessChecksTo("TestDll")] // for .net core, and pls modify assembly name
- */
 
 namespace ScriptHotReload
 {
@@ -96,13 +89,11 @@ namespace ScriptHotReload
         private AssemblyDefinition _newAssDef;
         private int _patchNo;
 
-#if SCRIPT_PATCH_DEBUG
-        class DebugMsg
+        class MethodFixStatus
         {
-            public string msg;
+            public bool needHook;
+            public bool ilFixed;
         }
-        List<DebugMsg> lstDebug = new List<DebugMsg>();
-#endif
 
         public AssemblyDataBuilder(AssemblyDefinition baseAssDef, AssemblyDefinition newAssDef)
         {
@@ -322,13 +313,9 @@ namespace ScriptHotReload
                 }
             }
         }
-
         
         void FixNewAssembly()
         {
-#if SCRIPT_PATCH_DEBUG
-            lstDebug.Clear();
-#endif
             // .net 不允许加载同名Assembly，因此需要改名
             _newAssDef.Name.Name = string.Format(kPatchAssemblyName, _baseAssDef.Name.Name, _patchNo);
             {
@@ -379,22 +366,48 @@ namespace ScriptHotReload
                 }
             }
 
-            HashSet<MethodDefinition> processed = new HashSet<MethodDefinition>();
+            var processed = new Dictionary<MethodDefinition, MethodFixStatus>();
             foreach (var kv in methodsToFix)
             {
                 FixMethod(kv.Value.definition, processed, 0);
             }
 
-#if SCRIPT_PATCH_DEBUG
-            if(lstDebug.Count > 0)
+            if (processed.Count > 0)
             {
+                var fixedType = new HashSet<TypeDefinition>();
+                foreach(var kv in processed)
+                {
+                    if (kv.Value.ilFixed || kv.Value.needHook)
+                        fixedType.Add(kv.Key.DeclaringType);
+                }
+
+                if(fixedType.Count > 0)
+                {
+                    var constructors = new List<MethodDefinition>();
+                    foreach (var tdef in fixedType)
+                    {
+                        if (tdef.FullName.EndsWith(kLambdaWrapperBackend))
+                            continue;
+
+                        foreach(var mdef in tdef.Methods)
+                        {
+                            if (mdef.IsConstructor && mdef.IsStatic && mdef.HasBody)
+                                constructors.Add(mdef);
+                        }
+                    }
+                    FixStaticConstructors(constructors);
+                }
+
+#if SCRIPT_PATCH_DEBUG
                 StringBuilder sb = new StringBuilder();
-                foreach (var msg in lstDebug)
-                    sb.AppendLine(msg.msg);
-                Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sb.ToString()}");
-            }
-                
+                foreach (var kv in processed)
+                    sb.AppendLine(kv.Key + (kv.Value.needHook ? " [Hook]" : "") + (kv.Value.ilFixed ? " [Fix]" : ""));
+
+                Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sb}");
 #endif
+            }
+
+
         }
 
         /// <summary>
@@ -402,31 +415,17 @@ namespace ScriptHotReload
         /// </summary>
         /// <param name="definition"></param>
         /// <param name="processed"></param>
-        void FixMethod(MethodDefinition definition, HashSet<MethodDefinition> processed, int depth)
+        void FixMethod(MethodDefinition definition, Dictionary<MethodDefinition, MethodFixStatus> processed, int depth)
         {
-#if SCRIPT_PATCH_DEBUG
-            bool hasFixed = false;
-            var dbgMsg = new DebugMsg();
-            if (processed.Contains(definition))
+            var fixStatus = new MethodFixStatus();
+            if (processed.ContainsKey(definition))
                 return;
             else
-            {
-                processed.Add(definition);
+                processed.Add(definition, fixStatus);
 
-                var sig = definition.ToString();
-                if (assemblyData.methodModified.ContainsKey(sig))
-                    dbgMsg.msg = sig + "  [Hook]";
-                else
-                    dbgMsg.msg = sig;
-
-                lstDebug.Add(dbgMsg);
-            }
-#else
-            if (processed.Contains(definition))
-                return;
-            else
-                processed.Add(definition);
-#endif
+            var sig = definition.ToString();
+            if (assemblyData.methodModified.ContainsKey(sig))
+                fixStatus.needHook = true;
 
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
 
@@ -457,9 +456,7 @@ namespace ScriptHotReload
 								var fieldRef = _newAssDef.MainModule.ImportReference (baseFieldDef);
 								var newIns = Instruction.Create (ins.OpCode, fieldRef);
 								ilProcessor.Replace (ins, newIns);
-#if SCRIPT_PATCH_DEBUG
-                                hasFixed = true;
-#endif
+                                fixStatus.ilFixed = true;
                             } else
 								throw new Exception ($"can not find field {fieldDef.FullName} in base dll");
                         } else
@@ -483,17 +480,7 @@ namespace ScriptHotReload
                             var reference = _newAssDef.MainModule.ImportReference(baseMethodDef.definition);
                             var newIns = Instruction.Create (ins.OpCode, reference);
                             ilProcessor.Replace (ins, newIns);
-#if SCRIPT_PATCH_DEBUG
-                            hasFixed = true;
-#endif
-                            if(depth < 1)
-                            {
-                                /*
-                                 * 被Hook的函数被调用时，即使IP已跳转到新的地址，但VM还是认为当前的函数栈位于原函数内，其Assembly也识别为原始dll
-                                 * 因此其内直接调用的函数无论是否发生改变均需要执行修正
-                                 */
-                                FixMethod(methodDef, processed, depth + 1);
-                            }
+                            fixStatus.ilFixed = true;
                         }
                         else // 这是新定义的方法或者lambda表达式，需要递归修正
                         {
@@ -504,11 +491,23 @@ namespace ScriptHotReload
                 while (false);
                 
             }
+        }
 
-#if SCRIPT_PATCH_DEBUG
-            if (hasFixed)
-                dbgMsg.msg += " [Fix]";
-#endif
+        /// <summary>
+        /// 修正被Hook或者被Fix的类型的静态构造函数，将它们改为直接返回的空函数
+        /// </summary>
+        /// <param name="constructors"></param>
+        void FixStaticConstructors(List<MethodDefinition> constructors)
+        {
+            foreach(var ctor in constructors)
+            {
+                if (ctor.Name != ".cctor" || !ctor.HasBody)
+                    continue;
+
+                var il = ctor.Body.GetILProcessor();
+                il.Clear();
+                il.Append(Instruction.Create(OpCodes.Ret));
+            }
         }
     }
 

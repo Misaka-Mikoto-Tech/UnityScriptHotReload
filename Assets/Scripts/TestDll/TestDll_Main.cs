@@ -72,10 +72,7 @@ namespace NS_Test
 #else
         static Test3()
         {
-            /*
-             * TODO 存在被hook函数的类的静态构造函数不允许被hook且需要Fix此函数为若原始类静态变量已初始化则此函数直接return，
-             * 否则此函数会被执行两次且直接在定义处赋值的静态变量也会被重新初始化
-             */
+            Debug.Assert(false, "static constructor of patched type can not be invoke");
             Debug.Log("static constructor patched");
         }
 

@@ -95,11 +95,7 @@ namespace ScriptHotReload
         {
             var flags = BuildBindingFlags(definition);
             bool isConstructor = definition.IsConstructor;
-            MethodBase[] mis;
-            if (isConstructor)
-                mis = t.GetConstructors(flags);
-            else
-                mis = t.GetMethods(flags);
+            MethodBase[] mis = isConstructor ? t.GetConstructors(flags) : t.GetMethods(flags);
 
             ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
             foreach(var mi in mis)
@@ -150,15 +146,12 @@ namespace ScriptHotReload
                 return null;
 
             var flags = BuildBindingFlags(methodBase);
-            string methodSig = methodBase.ToString();
-            MethodBase[] mis;
-            if(methodBase.IsConstructor || methodBase.Name == ".cctor")
-                mis = t.GetConstructors(flags);
-            else
-                mis = t.GetMethods(flags);
+            string sig = methodBase.ToString();
+            MethodBase[] mis = (methodBase is ConstructorInfo) ? t.GetConstructors(flags) : t.GetMethods(flags);
+
             foreach(var mi in mis)
             {
-                if (mi.ToString() == methodSig)
+                if (mi.ToString() == sig)
                     return mi;
             }
             return null;
