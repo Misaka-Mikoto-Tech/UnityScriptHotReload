@@ -6,9 +6,10 @@ Unity开发者经常需要在Editor运行起游戏后调试代码，并临时修
 本仓库解决了这个问题，可以实时修改代码并无缝使用新代码的逻辑继续运行，并保持内存中的数据和线程上下文均不改变。
 
 ### 安装步骤
-* 复制 `Assets\HotReload` 目录到您的工程
-* 如果提示 `Mono.Cecil.dll` 文件有多份，删除 `HotReload\Editor\Plugins\Mono.Cecil.dll` 文件
-* 打开文件 `HotReload\Editor\HotReloadConfig.cs`, 通过修改`HotReloadConfig.hotReloadAssemblies` 字段预先配置您需要热重载的程序集名称列表
+* 复制 `Assets/HotReload` 目录到您的工程
+* 如果提示 `Mono.Cecil.dll` 文件有多份，删除 `HotReload/Editor/Plugins/Mono.Cecil.dll` 文件
+* 如果提示 `MethodHook` 有冲突，删除 `Assets/HotReload/UnityHook` 目录, 并确保您的本地版本更新到最新
+* 打开文件 `HotReload/Editor/HotReloadConfig.cs`, 通过修改`HotReloadConfig.hotReloadAssemblies` 字段预先配置您需要热重载的程序集名称列表
 
 ### 使用步骤
 1. 点击`Play`按钮启动游戏，测试中发现逻辑错误，假设此场景不容易重现，您并不想停止play修改代码后再重新运行
@@ -23,6 +24,7 @@ Unity开发者经常需要在Editor运行起游戏后调试代码，并临时修
 * 可以新增类型
 * **不可以修改已存在类型的成员变量**
 * **不可以新增虚函数**
+* **对新增类型或者函数的访问只能通过已存在函数的代码调用，一般情况下无法通过反射调用(patch编号是自增的)**
 
 ### 测试用例使用步骤
 > 测试用例文件为 `Assets/Scripts/TestDll/TestDll_Main.cs`
