@@ -1,4 +1,9 @@
-﻿using System;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;

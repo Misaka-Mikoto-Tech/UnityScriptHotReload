@@ -1,4 +1,9 @@
-﻿using System.Collections;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -93,6 +98,8 @@ namespace ScriptHotReload
             HookAssemblies.DoHook(methodsToHook);
             if (methodsToHook.Count > 0)
                 patchNo++;
+
+            Debug.Log("<color=yellow>热重载完成</color>");
         }
     }
 
