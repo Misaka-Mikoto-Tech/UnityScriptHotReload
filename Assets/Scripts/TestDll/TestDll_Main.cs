@@ -9,6 +9,24 @@ using UnityEngine;
 
 namespace NS_Test
 {
+#if APPLY_PATCH
+    public class NewTestClass
+    {
+        public static int val;
+        public int x;
+        static NewTestClass()
+        {
+            // 请注意，新增类的静态构造函数尽量不要影响其它类数据
+            val = 2;
+            Debug.Log("NewTestClass static constructor");
+        }
+
+        public int Add(int y)
+        {
+            return x + y + val;
+        }
+    }
+#endif
     public unsafe class Test3
     {
         private class InnerTest
@@ -90,6 +108,10 @@ namespace NS_Test
 
             _innerTest.FuncInnerA(5);
 
+            var newCls = new NewTestClass();
+            newCls.x = 1;
+            Debug.Log($"NewTestClass.Add:{newCls.Add(3)}");
+
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
         public void FuncNew()
@@ -100,6 +122,11 @@ namespace NS_Test
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
+
+        // add new virtual method to exists type is not allowd
+        //public virtual void FuncVirtualNew()
+        //{
+        //}
 #endif
 
         public void TestB()
@@ -113,10 +140,9 @@ namespace NS_Test
             TestB();
         }
 
-        [MethodImpl(MethodImplOptions.NoOptimization)]
         void PrintMethodLocation(MethodBase method)
         {
-            string assPath = method.DeclaringType.Assembly.Location;
+            string assPath = method.DeclaringType.Assembly.Location.Substring(Environment.CurrentDirectory.Length + 1);
             Debug.Log($"location `<color=yellow>{method.Name}</color>` of current dll: <color=yellow>{assPath.Replace('\\', '/')}</color>");
         }
     }

@@ -47,6 +47,7 @@ namespace ScriptHotReload
         public Assembly     assembly;
         public Dictionary<string, TypeData>     baseTypes       = new Dictionary<string, TypeData>();
         public Dictionary<string, TypeData>     newTypes        = new Dictionary<string, TypeData>();
+        public Dictionary<string, TypeData>     addedTypes = new Dictionary<string, TypeData>(); // 新增类型，不包括自动生成的 lambda表达式类
         public Dictionary<string, MethodData>   allBaseMethods    = new Dictionary<string, MethodData>(); // 用于快速搜索
         public Dictionary<string, MethodData>   methodModified  = new Dictionary<string, MethodData>(); // new method data
     }
@@ -108,17 +109,24 @@ namespace ScriptHotReload
 
             assemblyData.baseTypes.Clear ();
             assemblyData.newTypes.Clear ();
+            assemblyData.addedTypes.Clear();
             assemblyData.allBaseMethods.Clear ();
             assemblyData.methodModified.Clear ();
             
             var baseTypes = _baseAssDef.MainModule.Types;
-            var newTypes = _newAssDef.MainModule.Types;
+            var newTypes = _newAssDef.MainModule.Types; // 不包括 NestedClass
 
             foreach (var t in baseTypes)
                 GenTypeInfos(t, null, assemblyData.baseTypes);
 
             foreach (var t in newTypes)
                 GenTypeInfos(t, null, assemblyData.newTypes);
+
+            foreach(var kvT in assemblyData.newTypes)
+            {
+                if (!assemblyData.baseTypes.ContainsKey(kvT.Key))
+                    assemblyData.addedTypes.Add(kvT.Key, kvT.Value);
+            }
 
             FillAllBaseMethods();
 
@@ -213,6 +221,19 @@ namespace ScriptHotReload
                     {
                         Debug.LogError($"field `{baseField}` changed of type:{typeName}");
                         return false;
+                    }
+                }
+
+                // 新增虚函数是不允许，会导致虚表发生变化
+                foreach(var kvM in newType.methods)
+                {
+                    if(!baseType.methods.ContainsKey(kvM.Key))
+                    {
+                        if(kvM.Value.definition.IsVirtual)
+                        {
+                            Debug.LogError($"add virtual method is not allowd:{kvM.Key}");
+                            return false;
+                        }
                     }
                 }
             }
@@ -366,18 +387,32 @@ namespace ScriptHotReload
                 }
             }
 
+            // 新增类的静态构造函数是第一次调用，因此需要Fix而不是Remove
+            foreach(var kvT in assemblyData.addedTypes)
+            {
+                foreach(var kvM in kvT.Value.methods)
+                {
+                    var def = kvM.Value.definition;
+                    if (def.IsConstructor && def.IsStatic)
+                        methodsToFix.Add(kvM.Key, kvM.Value);
+                }
+            }
+
             var processed = new Dictionary<MethodDefinition, MethodFixStatus>();
             foreach (var kv in methodsToFix)
             {
                 FixMethod(kv.Value.definition, processed, 0);
             }
 
+
+            // 已存在类的静态构造函数需要清空，防止被二次调用
             if (processed.Count > 0)
             {
                 var fixedType = new HashSet<TypeDefinition>();
                 foreach(var kv in processed)
                 {
-                    if (kv.Value.ilFixed || kv.Value.needHook)
+                    var status = kv.Value;
+                    if (status.ilFixed || status.needHook)
                         fixedType.Add(kv.Key.DeclaringType);
                 }
 
@@ -386,7 +421,11 @@ namespace ScriptHotReload
                     var constructors = new List<MethodDefinition>();
                     foreach (var tdef in fixedType)
                     {
-                        if (tdef.FullName.EndsWith(kLambdaWrapperBackend))
+                        if (tdef.FullName.EndsWith(kLambdaWrapperBackend, StringComparison.Ordinal))
+                            continue;
+
+                        // 新定义的类型静态构造函数即使执行也是第一次执行，因此逻辑只能修正不能移除
+                        if (assemblyData.addedTypes.ContainsKey(tdef.FullName))
                             continue;
 
                         foreach(var mdef in tdef.Methods)
@@ -395,7 +434,7 @@ namespace ScriptHotReload
                                 constructors.Add(mdef);
                         }
                     }
-                    FixStaticConstructors(constructors);
+                    RemoveStaticConstructorsBody(constructors);
                 }
 
 #if SCRIPT_PATCH_DEBUG
@@ -428,13 +467,9 @@ namespace ScriptHotReload
                 fixStatus.needHook = true;
 
             // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
-
-            var arrIns = definition.Body.Instructions.ToArray();
             var ilProcessor = definition.Body.GetILProcessor ();
-
-            for (int i = 0, imax = arrIns.Length; i < imax; i++)
+            foreach(var ins in definition.Body.Instructions)
             {
-                Instruction ins = arrIns[i];
                 do
                 {
                     /*
@@ -494,10 +529,11 @@ namespace ScriptHotReload
         }
 
         /// <summary>
-        /// 修正被Hook或者被Fix的类型的静态构造函数，将它们改为直接返回的空函数
+        /// 修正被Hook或者被Fix的类型的静态构造函数，将它们改为直接返回的空函数, 否则它们会执行两遍
         /// </summary>
         /// <param name="constructors"></param>
-        void FixStaticConstructors(List<MethodDefinition> constructors)
+        /// <remarks>新增类的静态构造函数由于是第一次执行，因此不能清空函数体，只能修正</remarks>
+        void RemoveStaticConstructorsBody(List<MethodDefinition> constructors)
         {
             foreach(var ctor in constructors)
             {
