@@ -3,7 +3,7 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-#if UNITY_2020_1_OR_NEWER
+#if !UNITY_2020_1_OR_NEWER
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -40,6 +40,13 @@ namespace ScriptHotReload
         BuildingWithoutScriptUpdater                = 1 << 11
     }
 
+    public class CompileSetttings
+    {
+        public EditorScriptCompilationOptions options;
+        public BuildTargetGroup platformGroup;
+        public BuildTarget platform;
+    }
+
     /// <summary>
     /// 封装反射调用的 UnityEditor.Scripting.ScriptCompilation 及相关命名空间内的类型和函数
     /// </summary>
@@ -48,13 +55,13 @@ namespace ScriptHotReload
         public static Type tEditorCompilationInterface { get; private set; }
         public static Type tEditorCompilation { get; private set; }
         public static Type tScriptAssemblySettings { get; private set; }
-        public static Type tBeeDriver { get; private set; }
+        public static Type tCompilationPipeline { get; private set; }
 
         public static MethodInfo miTickCompilationPipeline { get; private set; }
         public static MethodInfo miBeeDriver_Tick { get; private set; }
         public static MethodInfo miCreateScriptAssemblySettings { get; private set; }
         public static MethodInfo miScriptSettings_SetOutputDirectory { get; private set; }
-        public static MethodInfo miCompileScriptsWithSettings { get; private set; }
+        public static MethodInfo miCompileScripts { get; private set; }
         public static MethodInfo miRequestScriptCompilation { get; private set; }
 
         public static object EditorCompilation_Instance { get; private set; }
@@ -64,20 +71,19 @@ namespace ScriptHotReload
             tEditorCompilationInterface = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilationInterface");
             tEditorCompilation = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilation");
             tScriptAssemblySettings = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.ScriptAssemblySettings");
+            tCompilationPipeline = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Compilation.CompilationPipeline");
 
-            tBeeDriver = (from ass in AppDomain.CurrentDomain.GetAssemblies() where ass.FullName.StartsWith("Bee.BeeDriver") select ass).FirstOrDefault().GetType("Bee.BeeDriver.BeeDriver");
-            miBeeDriver_Tick = tBeeDriver.GetMethod("Tick", BindingFlags.Public | BindingFlags.Instance);
             miTickCompilationPipeline = tEditorCompilationInterface.GetMethod("TickCompilationPipeline", BindingFlags.Static | BindingFlags.Public);
-            
-            foreach (var mi in tEditorCompilation.GetMethods())
+
+            foreach (var mi in tEditorCompilation.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
-                if (mi.Name == "CreateScriptAssemblySettings" && mi.GetParameters().Length == 4)
+                if (mi.Name == "CreateScriptAssemblySettings" && mi.GetParameters().Length == 3)
                     miCreateScriptAssemblySettings = mi;
-                else if (mi.Name == "CompileScriptsWithSettings")
-                    miCompileScriptsWithSettings = mi;
+                else if (mi.Name == "CompileScripts" && mi.GetParameters().Length == 6)
+                    miCompileScripts = mi;
             }
             miScriptSettings_SetOutputDirectory = tScriptAssemblySettings.GetProperty("OutputDirectory", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
-            miRequestScriptCompilation = tEditorCompilation.GetMethod("RequestScriptCompilation", BindingFlags.Public | BindingFlags.Instance);
+            miRequestScriptCompilation = tCompilationPipeline.GetMethod("RequestScriptCompilation", BindingFlags.Public | BindingFlags.Static);
 
             EditorCompilation_Instance = tEditorCompilationInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
         }
@@ -86,14 +92,14 @@ namespace ScriptHotReload
         {
             CompileStatus ret = (CompileStatus)miTickCompilationPipeline.Invoke(null, new object[]
             {
-                (int)options, platfromGroup, platform, subtarget, extraScriptingDefines
+                (int)options, platfromGroup, platform
             });
             return ret;
         }
 
         public static object CreateScriptAssemblySettings(BuildTargetGroup platfromGroup, BuildTarget platform, EditorScriptCompilationOptions options, string[] extraScriptingDefines, string outputDir)
         {
-            object ret = miCreateScriptAssemblySettings.Invoke(EditorCompilation_Instance, new object[] { platfromGroup, platform, (int)options, extraScriptingDefines });
+            object ret = miCreateScriptAssemblySettings.Invoke(EditorCompilation_Instance, new object[] { platfromGroup, platform, (int)options });
             SetScriptAssemblyOutputDir(ret, outputDir);
             return ret;
         }
@@ -105,14 +111,17 @@ namespace ScriptHotReload
 
         public static CompileStatus CompileScriptsWithSettings(object scriptAssemblySettings)
         {
-            CompileStatus ret =  (CompileStatus)miCompileScriptsWithSettings.Invoke(EditorCompilation_Instance, new object[] { scriptAssemblySettings });
+            var param = CompileScript.editorBuildParams;
+            CompileStatus ret =  (CompileStatus)miCompileScripts.Invoke(EditorCompilation_Instance, new object[] 
+            {
+                scriptAssemblySettings, param.outputDir, (int)param.options, /*StopOnFirstError*/1, null, null
+            });
             return ret;
         }
 
         public static void RequestScriptCompilation(string reason)
         {
-            //miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.CleanBuildCache });
-            miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.None });
+            miRequestScriptCompilation.Invoke(null, new object[] { });
         }
     }
 

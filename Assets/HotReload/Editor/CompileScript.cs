@@ -39,6 +39,7 @@ namespace ScriptHotReload
             public BuildTarget                      platform;
             public int                              subtarget;
             public string[]                         extraScriptingDefines;
+            public string                           outputDir;
         }
         
         static bool s_CompileRequested = false;
@@ -52,6 +53,7 @@ namespace ScriptHotReload
             }
 
             // 生成编译配置并指定输出目录
+            editorBuildParams.outputDir = outputDir;
             object scriptAssemblySettings = EditorCompilationWrapper.CreateScriptAssemblySettings(
                 editorBuildParams.platformGroup, editorBuildParams.platform, editorBuildParams.options, editorBuildParams.extraScriptingDefines, outputDir);
             
