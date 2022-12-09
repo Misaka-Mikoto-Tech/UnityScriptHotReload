@@ -18,7 +18,6 @@ using static ScriptHotReload.HotReloadUtils;
 using static ScriptHotReload.HotReloadConfig;
 using System.Security.Permissions;
 using SecurityAction = System.Security.Permissions.SecurityAction;
-using Unity.VisualScripting;
 using OpCodes = Mono.Cecil.Cil.OpCodes;
 
 #if UNITY_EDITOR
@@ -360,7 +359,8 @@ namespace ScriptHotReload
                 {
                     // 使用当前 editor dll的 security attributes 替换目标数据（构造这些数据太复杂，editor dll 我们可以提前定义模板）
                     _newAssDef.SecurityDeclarations.Clear();
-                    _newAssDef.SecurityDeclarations.AddRange(editorAssemDef.SecurityDeclarations);
+                    foreach (var sd in editorAssemDef.SecurityDeclarations)
+                        _newAssDef.SecurityDeclarations.Add(sd);
                     // TODO for .net core, modify assembly name of `IgnoresAccessChecksTo` with code
                 }
             }

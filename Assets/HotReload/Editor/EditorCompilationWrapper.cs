@@ -60,13 +60,16 @@ namespace ScriptHotReload
 
         static EditorCompilationWrapper()
         {
-            tEditorCompilationInterface = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilationInterface");
-            tEditorCompilation = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilation");
-            tScriptAssemblySettings = typeof(UnityEditor.Scripting.ManagedDebugger).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.ScriptAssemblySettings");
-            tBeeDriver = (from ass in AppDomain.CurrentDomain.GetAssemblies() where ass.FullName.StartsWith("Bee.BeeDriver") select ass).FirstOrDefault().GetType("Bee.BeeDriver.BeeDriver");
+            tEditorCompilationInterface = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilationInterface");
+            tEditorCompilation = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.EditorCompilation");
+            tScriptAssemblySettings = typeof(UnityEditor.AssetDatabase).Assembly.GetType("UnityEditor.Scripting.ScriptCompilation.ScriptAssemblySettings");
 
-            miTickCompilationPipeline = tEditorCompilationInterface.GetMethod("TickCompilationPipeline", BindingFlags.Static | BindingFlags.Public);
+#if UNITY_2021_1_OR_NEWER
+            tBeeDriver = (from ass in AppDomain.CurrentDomain.GetAssemblies() where ass.FullName.StartsWith("Bee.BeeDriver") select ass).FirstOrDefault().GetType("Bee.BeeDriver.BeeDriver");
             miBeeDriver_Tick = tBeeDriver.GetMethod("Tick", BindingFlags.Public | BindingFlags.Instance);
+#endif
+            miTickCompilationPipeline = tEditorCompilationInterface.GetMethod("TickCompilationPipeline", BindingFlags.Static | BindingFlags.Public);
+            
             foreach (var mi in tEditorCompilation.GetMethods())
             {
                 if (mi.Name == "CreateScriptAssemblySettings" && mi.GetParameters().Length == 4)
@@ -109,8 +112,12 @@ namespace ScriptHotReload
 
         public static void RequestScriptCompilation(string reason)
         {
+#if UNITY_2021_1_OR_NEWER
             //miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.CleanBuildCache });
             miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.None });
+#else
+            miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { });
+#endif
         }
     }
 

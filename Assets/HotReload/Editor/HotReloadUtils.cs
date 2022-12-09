@@ -12,7 +12,6 @@ using System;
 using System.Reflection;
 using Mono.Cecil;
 using UnityEditor;
-using Unity.VisualScripting;
 
 namespace ScriptHotReload
 {
@@ -100,7 +99,7 @@ namespace ScriptHotReload
         {
             var flags = BuildBindingFlags(definition);
             bool isConstructor = definition.IsConstructor;
-            MethodBase[] mis = isConstructor ? t.GetConstructors(flags) : t.GetMethods(flags);
+            MethodBase[] mis = isConstructor ? (MethodBase[])t.GetConstructors(flags) : t.GetMethods(flags);
 
             ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
             foreach(var mi in mis)
@@ -152,7 +151,7 @@ namespace ScriptHotReload
 
             var flags = BuildBindingFlags(methodBase);
             string sig = methodBase.ToString();
-            MethodBase[] mis = (methodBase is ConstructorInfo) ? t.GetConstructors(flags) : t.GetMethods(flags);
+            MethodBase[] mis = (methodBase is ConstructorInfo) ? (MethodBase[])t.GetConstructors(flags) : t.GetMethods(flags);
 
             foreach(var mi in mis)
             {
@@ -174,7 +173,7 @@ namespace ScriptHotReload
 
         public static bool IsLambdaMethod(MethodReference methodReference)
         {
-            return methodReference.Name.StartsWith('<');
+            return methodReference.Name.StartsWith("<");
         }
     }
 

@@ -64,28 +64,31 @@ namespace ScriptHotReload
                     continue;
 
                 ReaderParameters param = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true };
-                using var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, param);
-                using var newAssDef = AssemblyDefinition.ReadAssembly(newDll, param);
-
-                var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
-                if (!assBuilder.DoBuild(patchNo))
+                using (var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, param))
                 {
-                    Debug.LogError($"[{assName}]不符合热重载条件，停止重载");
-                    return;
+                    using(var newAssDef = AssemblyDefinition.ReadAssembly(newDll, param))
+                    {
+                        var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
+                        if (!assBuilder.DoBuild(patchNo))
+                        {
+                            Debug.LogError($"[{assName}]不符合热重载条件，停止重载");
+                            return;
+                        }
+
+                        // TODO copy pdb files
+                        if (!File.Exists(lastDll))
+                            File.Copy(baseDll, lastDll);
+
+                        if (assBuilder.assemblyData.methodModified.Count == 0)
+                            continue;
+
+                        string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
+                        newAssDef.Write(patchDll);
+                        File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
+
+                        methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
+                    }
                 }
-
-                // TODO copy pdb files
-                if (!File.Exists(lastDll))
-                    File.Copy(baseDll, lastDll);
-
-                if (assBuilder.assemblyData.methodModified.Count == 0)
-                    continue;
-
-                string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
-                newAssDef.Write(patchDll);
-                File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
-
-                methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
             }
             GC.Collect();
             
