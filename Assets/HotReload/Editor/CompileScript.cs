@@ -39,6 +39,8 @@ namespace ScriptHotReload
             public BuildTarget                      platform;
             public int                              subtarget;
             public string[]                         extraScriptingDefines;
+            public bool                             allowBlocking;
+
             public string                           outputDir;
         }
         
@@ -59,6 +61,7 @@ namespace ScriptHotReload
             
             Directory.CreateDirectory(outputDir);
             RemoveAllFiles(outputDir);
+            EditorCompilationWrapper.DirtyAllScripts();
             var status = EditorCompilationWrapper.CompileScriptsWithSettings(scriptAssemblySettings);
             Debug.Log($"开始编译dll到目录: {outputDir}");
             s_CompileRequested = true;
@@ -123,6 +126,34 @@ namespace ScriptHotReload
                         editorBuildParams.subtarget, editorBuildParams.extraScriptingDefines);
         }
 
+
+#if UNITY_2023_1_OR_NEWER
+        /// <summary>
+        /// 拦截Unity自己的Editor编译函数获取编译参数
+        /// </summary>
+        /// <param name="options">type:EditorScriptCompilationOptions</param>
+        /// <remarks>此函数每帧都会被调用，即使当前无需编译</remarks>
+        static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines, bool allowBlocking)
+        {
+            editorBuildParams.options = options;
+            editorBuildParams.platformGroup = platfromGroup;
+            editorBuildParams.platform = platform;
+            editorBuildParams.subtarget = subtarget;
+            editorBuildParams.extraScriptingDefines = extraScriptingDefines;
+            editorBuildParams.allowBlocking = allowBlocking;
+
+            compileStatus = TickCompilationPipeline_Proxy(options, platfromGroup, platform, subtarget, extraScriptingDefines, allowBlocking);
+            //Debug.Log($"TickCompilationPipleline with status:{s_CompileStatus}");
+            return compileStatus;
+        }
+
+        [MethodImpl(MethodImplOptions.NoOptimization)]
+        static CompileStatus TickCompilationPipeline_Proxy(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines, bool allowBlocking)
+        {
+            Debug.Log($"dummy code " + platfromGroup.GetType());
+            return CompileStatus.Idle;
+        }
+#elif UNITY_2021_2_OR_NEWER
         /// <summary>
         /// 拦截Unity自己的Editor编译函数获取编译参数
         /// </summary>
@@ -147,5 +178,53 @@ namespace ScriptHotReload
             Debug.Log($"dummy code " + platfromGroup.GetType());
             return CompileStatus.Idle;
         }
+#elif UNITY_2020_1_OR_NEWER
+        /// <summary>
+        /// 拦截Unity自己的Editor编译函数获取编译参数
+        /// </summary>
+        /// <param name="options">type:EditorScriptCompilationOptions</param>
+        /// <remarks>此函数每帧都会被调用，即使当前无需编译</remarks>
+        static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, string[] extraScriptingDefines)
+        {
+            editorBuildParams.options = options;
+            editorBuildParams.platformGroup = platfromGroup;
+            editorBuildParams.platform = platform;
+            editorBuildParams.extraScriptingDefines = extraScriptingDefines;
+
+            compileStatus = TickCompilationPipeline_Proxy(options, platfromGroup, platform, extraScriptingDefines);
+            //Debug.Log($"TickCompilationPipleline with status:{s_CompileStatus}");
+            return compileStatus;
+        }
+
+        [MethodImpl(MethodImplOptions.NoOptimization)]
+        static CompileStatus TickCompilationPipeline_Proxy(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, string[] extraScriptingDefines)
+        {
+            Debug.Log($"dummy code " + platfromGroup.GetType());
+            return CompileStatus.Idle;
+        }
+#else
+        /// <summary>
+        /// 拦截Unity自己的Editor编译函数获取编译参数
+        /// </summary>
+        /// <param name="options">type:EditorScriptCompilationOptions</param>
+        /// <remarks>此函数每帧都会被调用，即使当前无需编译</remarks>
+        static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform)
+        {
+            editorBuildParams.options = options;
+            editorBuildParams.platformGroup = platfromGroup;
+            editorBuildParams.platform = platform;
+
+            compileStatus = TickCompilationPipeline_Proxy(options, platfromGroup, platform);
+            //Debug.Log($"TickCompilationPipleline with status:{s_CompileStatus}");
+            return compileStatus;
+        }
+
+        [MethodImpl(MethodImplOptions.NoOptimization)]
+        static CompileStatus TickCompilationPipeline_Proxy(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform)
+        {
+            Debug.Log($"dummy code " + platfromGroup.GetType());
+            return CompileStatus.Idle;
+        }
+#endif
     }
 }

@@ -63,6 +63,7 @@ namespace ScriptHotReload
         public static MethodInfo miScriptSettings_SetOutputDirectory { get; private set; }
         public static MethodInfo miCompileScripts { get; private set; }
         public static MethodInfo miRequestScriptCompilation { get; private set; }
+        public static MethodInfo miDirtyAllScripts { get; private set; }
 
         public static object EditorCompilation_Instance { get; private set; }
 
@@ -84,6 +85,7 @@ namespace ScriptHotReload
             }
             miScriptSettings_SetOutputDirectory = tScriptAssemblySettings.GetProperty("OutputDirectory", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
             miRequestScriptCompilation = tCompilationPipeline.GetMethod("RequestScriptCompilation", BindingFlags.Public | BindingFlags.Static);
+            miDirtyAllScripts = tEditorCompilationInterface.GetMethod("DirtyAllScripts", BindingFlags.Public | BindingFlags.Static);
 
             EditorCompilation_Instance = tEditorCompilationInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
         }
@@ -122,6 +124,11 @@ namespace ScriptHotReload
         public static void RequestScriptCompilation(string reason)
         {
             miRequestScriptCompilation.Invoke(null, new object[] { });
+        }
+
+        public static void DirtyAllScripts()
+        {
+            miDirtyAllScripts.Invoke(null, new object[] { });
         }
     }
 

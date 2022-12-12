@@ -3,7 +3,7 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-#if UNITY_2020_1_OR_NEWER
+#if UNITY_2021_2_OR_NEWER
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -56,6 +56,7 @@ namespace ScriptHotReload
         public static MethodInfo miScriptSettings_SetOutputDirectory { get; private set; }
         public static MethodInfo miCompileScriptsWithSettings { get; private set; }
         public static MethodInfo miRequestScriptCompilation { get; private set; }
+        public static MethodInfo miDirtyAllScripts { get; private set; }
 
         public static object EditorCompilation_Instance { get; private set; }
 
@@ -78,6 +79,7 @@ namespace ScriptHotReload
             }
             miScriptSettings_SetOutputDirectory = tScriptAssemblySettings.GetProperty("OutputDirectory", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
             miRequestScriptCompilation = tEditorCompilation.GetMethod("RequestScriptCompilation", BindingFlags.Public | BindingFlags.Instance);
+            miDirtyAllScripts = tEditorCompilationInterface.GetMethod("DirtyAllScripts", BindingFlags.Public | BindingFlags.Static);
 
             EditorCompilation_Instance = tEditorCompilationInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
         }
@@ -113,6 +115,12 @@ namespace ScriptHotReload
         {
             //miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.CleanBuildCache });
             miRequestScriptCompilation.Invoke(EditorCompilation_Instance, new object[] { reason, UnityEditor.Compilation.RequestScriptCompilationOptions.None });
+        }
+
+        public static void DirtyAllScripts()
+        {
+            // DirtyAllScripts has been removed since 2021.1
+            miDirtyAllScripts?.Invoke(null, new object[] { });
         }
     }
 
