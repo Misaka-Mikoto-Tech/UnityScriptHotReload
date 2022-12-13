@@ -528,6 +528,9 @@ namespace ScriptHotReload
             else
                 processed.Add(definition, fixStatus);
 
+            if (!definition.HasBody)
+                return;
+
             var sig = definition.ToString();
             if (assemblyData.methodModified.ContainsKey(sig))
                 fixStatus.needHook = true;
@@ -594,8 +597,11 @@ namespace ScriptHotReload
                     }
                 }
                 while (false);
-                
             }
+
+            // 即使没有修改任何IL，也需要刷新pdb, 因此在头部给它加个nop
+            if (!fixStatus.ilFixed)
+                ilProcessor.InsertBefore(ilProcessor.Body.Instructions[0], Instruction.Create(OpCodes.Nop));
         }
 
         /// <summary>

@@ -112,6 +112,10 @@ namespace NS_Test
             newCls.x = 1;
             Debug.Log($"NewTestClass.Add:{newCls.Add(3)}");
 
+            var test2 = new TestDll_2();
+            int z = test2.Mul_2(5, 6);
+            Debug.Log($"test2={z}");
+
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
         public void FuncNew()
@@ -142,6 +146,7 @@ namespace NS_Test
 
         void PrintMethodLocation(MethodBase method)
         {
+            var currMethod = MethodBase.GetCurrentMethod();
             string assPath = method.DeclaringType.Assembly.Location.Substring(Environment.CurrentDirectory.Length + 1);
             Debug.Log($"location `<color=yellow>{method.Name}</color>` of current dll: <color=yellow>{assPath.Replace('\\', '/')}</color>");
         }
