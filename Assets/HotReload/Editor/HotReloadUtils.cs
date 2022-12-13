@@ -12,6 +12,8 @@ using System;
 using System.Reflection;
 using Mono.Cecil;
 using UnityEditor;
+using Mono.Cecil.Cil;
+using System.Linq;
 
 namespace ScriptHotReload
 {
@@ -174,6 +176,15 @@ namespace ScriptHotReload
         public static bool IsLambdaMethod(MethodReference methodReference)
         {
             return methodReference.Name.StartsWith("<");
+        }
+
+        public static Document GetDocOfMethod(MethodDefinition definition)
+        {
+            var seqs = definition?.DebugInformation?.SequencePoints;
+            if (seqs.Count > 0)
+                return seqs[0].Document;
+            else
+                return null;
         }
     }
 

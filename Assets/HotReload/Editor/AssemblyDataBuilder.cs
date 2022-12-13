@@ -54,6 +54,7 @@ namespace ScriptHotReload
         public Dictionary<string, TypeData>     addedTypes = new Dictionary<string, TypeData>(); // 新增类型，不包括自动生成的 lambda表达式类
         public Dictionary<string, MethodData>   allBaseMethods    = new Dictionary<string, MethodData>(); // 用于快速搜索
         public Dictionary<string, MethodData>   methodModified  = new Dictionary<string, MethodData>(); // new method data
+        public Dictionary<Document, List<MethodData>> doc2methods = new Dictionary<Document, List<MethodData>>(); // newTypes 中 doc 与 method的映射
     }
 
     public class TypeData
@@ -75,13 +76,20 @@ namespace ScriptHotReload
         public MethodDefinition definition;
         public MethodBase       methodInfo;
         public bool             isLambda;
+        public bool             ilChanged;
+        public Document         document;
 
         public MethodData(TypeData typeData, MethodDefinition definition, MethodInfo methodInfo, bool isLambda)
         {
             this.typeData = typeData; this.definition = definition; this.methodInfo = methodInfo; this.isLambda = isLambda;
+            this.document = GetDocOfMethod(definition);
         }
     }
 
+    /// <summary>
+    /// 程序集构建器
+    /// TODO 将此功能移动到独立的exe，以始终使用release模式运行以及使用更新的runtime(.net6/7)
+    /// </summary>
     public class AssemblyDataBuilder
     {
         /// <summary>
@@ -126,10 +134,30 @@ namespace ScriptHotReload
             foreach (var t in newTypes)
                 GenTypeInfos(t, null, assemblyData.newTypes);
 
+            // 全局处理类型和方法
             foreach(var kvT in assemblyData.newTypes)
             {
                 if (!assemblyData.baseTypes.ContainsKey(kvT.Key))
                     assemblyData.addedTypes.Add(kvT.Key, kvT.Value);
+
+                if (IsLambdaStaticType(kvT.Key))
+                    continue;
+
+                foreach(var kvM in kvT.Value.methods)
+                {
+                    var methodData = kvM.Value;
+                    var doc = methodData.document;
+                    if (doc == null || methodData.isLambda)
+                        continue;
+
+                    if (!assemblyData.doc2methods.TryGetValue(doc, out List<MethodData> lst))
+                    {
+                        lst = new List<MethodData>();
+                        assemblyData.doc2methods.Add(doc, lst);
+                    }
+
+                    lst.Add(kvM.Value);
+                }
             }
 
             FillAllBaseMethods();
@@ -166,7 +194,8 @@ namespace ScriptHotReload
                     continue;
 
                 // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
-                typeData.methods.Add(method.ToString(), new MethodData(typeData, method, null, IsLambdaMethod(method)));
+                var data = new MethodData(typeData, method, null, IsLambdaMethod(method));
+                typeData.methods.Add(method.ToString(), data);
             }
 
             foreach(var field in typeDefinition.Fields)
@@ -287,10 +316,10 @@ namespace ScriptHotReload
 
                     var baseIns = baseMethod.definition.Body.Instructions;
                     var newIns = newMethod.definition.Body.Instructions;
-                    bool hasModified = false;
+                    bool ilChanged = false;
 
                     if (baseIns.Count != newIns.Count)
-                        hasModified = true;
+                        ilChanged = true;
                     else
                     {
                         // TODO 通过 method RVA/codeSize 对比，method header 只有两种size，1 or 12
@@ -300,14 +329,41 @@ namespace ScriptHotReload
                         {
                             if (arrBaseIns[l].ToString() != arrNewIns[l].ToString())
                             {
-                                hasModified = true;
+                                ilChanged = true;
                                 break;
                             }
                         }
                     }
 
-                    if (hasModified)
+                    if (ilChanged)
+                    {
+                        baseMethod.ilChanged = true;
+                        newMethod.ilChanged = true;
                         assemblyData.methodModified.Add(methodName, newMethod);
+                    }
+                }
+            }
+
+            // il发生改变的函数所在文件的其它所有原dll中存在的函数均添加到 modified 列表，以全部使用新的pdb(它们的行号可能发生了改变，不执行hook会导致断点失效)
+            HashSet<Document> docChanged = new HashSet<Document>();
+            foreach(var kv in assemblyData.methodModified)
+            {
+                docChanged.Add(kv.Value.document);
+            }
+
+            foreach(var doc in docChanged)
+            {
+                if(assemblyData.doc2methods.TryGetValue(doc, out List<MethodData> lstMethods))
+                {
+                    foreach(var method in lstMethods)
+                    {
+                        if (method.isLambda || method.definition.Name == ".cctor" || IsLambdaStaticType(method.definition.DeclaringType))
+                            continue;
+
+                        var name = method.definition.FullName;
+                        if (assemblyData.allBaseMethods.ContainsKey(name))
+                            assemblyData.methodModified.TryAdd(name, method);
+                    }
                 }
             }
 
@@ -444,7 +500,13 @@ namespace ScriptHotReload
 #if SCRIPT_PATCH_DEBUG
                 StringBuilder sb = new StringBuilder();
                 foreach (var kv in processed)
-                    sb.AppendLine(kv.Key + (kv.Value.needHook ? " [Hook]" : "") + (kv.Value.ilFixed ? " [Fix]" : ""));
+                {
+                    bool ilChanged = false;
+                    if (assemblyData.allBaseMethods.TryGetValue(kv.Key.FullName, out MethodData methodData))
+                        ilChanged = methodData.ilChanged;
+
+                    sb.AppendLine(kv.Key + (ilChanged ? " [Changed]" : "") + (kv.Value.needHook ? " [Hook]" : "") + (kv.Value.ilFixed ? " [Fix]" : ""));
+                }
 
                 Debug.Log($"<color=yellow>Patch Methods of `{_baseAssDef.Name.Name}`: </color>{sb}");
 #endif
