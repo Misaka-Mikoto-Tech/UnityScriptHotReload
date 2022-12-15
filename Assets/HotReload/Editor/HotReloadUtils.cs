@@ -110,7 +110,7 @@ namespace ScriptHotReload
                 {
                     if (mi.Name != definition.Name)
                         continue;
-                    if ((mi as MethodInfo).ReturnType.FullName != definition.ReturnType.FullName)
+                    if (GetTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
                         continue;
                 }
                 else if (mi.IsStatic != definition.IsStatic)
@@ -124,7 +124,8 @@ namespace ScriptHotReload
                     {
                         var defPara = defParaArr[i];
                         var pi = piArr[i];
-                        if (pi.ParameterType.FullName != defPara.ParameterType.FullName)
+
+                        if (GetTypeName(pi.ParameterType) != defPara.ParameterType.FullName)
                         {
                             found = false;
                             break;
@@ -185,6 +186,16 @@ namespace ScriptHotReload
                 return seqs[0].Document;
             else
                 return null;
+        }
+
+        private static string GetTypeName(Type t)
+        {
+            if (t.ContainsGenericParameters)
+            {
+                return t.Name;
+            }
+            else
+                return t.FullName;
         }
     }
 

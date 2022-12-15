@@ -12,19 +12,19 @@ public class Test : MonoBehaviour
     void Start()
     {
         btnTest.onClick.AddListener(OnBtnTest);
-        NS_Test.Test3.s_val = 456;
+        NS_Test.TestCls.s_val = 456;
         NS_Test.Test4.val = 1234;
     }
 
     void OnBtnTest()
     {
-        Debug.Log($"Test3.s_val={NS_Test.Test3.s_val}");
+        Debug.Log($"Test3.s_val={NS_Test.TestCls.s_val}");
 
-        var test = new NS_Test.Test3();
+        var test = new NS_Test.TestCls();
         test.FuncA(out int val);
         Debug.Log($"OnBtnTest:val={val}");
 
-        Debug.Log($"Test3.s_val={NS_Test.Test3.s_val}");
+        Debug.Log($"Test3.s_val={NS_Test.TestCls.s_val}");
     }
 
     // Update is called once per frame

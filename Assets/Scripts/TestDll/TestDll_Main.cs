@@ -27,7 +27,7 @@ namespace NS_Test
         }
     }
 #endif
-    public unsafe class Test3
+    public unsafe class TestCls
     {
         private class InnerTest
         {
@@ -67,7 +67,7 @@ namespace NS_Test
         }
 
 #if !APPLY_PATCH
-        static Test3()
+        static TestCls()
         {
             Debug.Log("static constructor");
         }
@@ -88,7 +88,7 @@ namespace NS_Test
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 #else
-        static Test3()
+        static TestCls()
         {
             Debug.Assert(false, "static constructor of patched type can not be invoke");
             Debug.Log("static constructor patched");
@@ -144,6 +144,12 @@ namespace NS_Test
             TestB();
         }
 
+        public T TestG<T>(T t) where T:new()
+        {
+            Debug.Log($"t.type is:{t.GetType()}");
+            return new T();
+        }
+
         void PrintMethodLocation(MethodBase method)
         {
             var currMethod = MethodBase.GetCurrentMethod();
@@ -155,5 +161,35 @@ namespace NS_Test
     public class Test4
     {
         public static int val = 2;
+    }
+
+    public class TestClsG<T>
+    {
+        public class TestClsGInner<V>
+        {
+            public int ShowInner(int x)
+            {
+                return x + 1;
+            }
+
+            public V ShowGInner<U>(T arg0, V arg1, U arg2)
+            {
+                Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(U).GetType()}");
+                return arg1;
+            }
+        }
+
+        public string str;
+        public T ShowGA<U>(T arg0, U arg1)
+        {
+            Debug.Log($"ShowA, T is:{typeof(T).GetType()}, U is:{typeof(U).GetType()}");
+            return arg0;
+        }
+
+        public U ShowGB<U>(T arg0, U arg1)
+        {
+            Debug.Log($"ShowB, T is:{typeof(T).GetType()}, U is:{typeof(U).GetType()}");
+            return arg1;
+        }
     }
 }

@@ -48,7 +48,7 @@ namespace ScriptHotReload
                 foreach(var data in kv.Value)
                 {
                     MethodBase miTarget = data.methodInfo;
-                    if (miTarget.IsGenericMethod) // 泛型暂时不处理
+                    if (miTarget.ContainsGenericParameters) // 泛型暂时不处理
                         continue;
 
                     MethodBase miReplace = GetMethodFromAssembly(miTarget, patchAssembly);
@@ -57,7 +57,7 @@ namespace ScriptHotReload
                         Debug.LogError($"can not find method `{miTarget}` in [{assName}]");
                         continue;
                     }
-                    new MethodHook(miTarget, miReplace, null, kHotReloadHookTag).Install();
+                    new MethodHook(miTarget, miReplace, null, kHotReloadHookTag).Install(); // TODO 不同dll使用不同的tag
                 }
             }
         }
