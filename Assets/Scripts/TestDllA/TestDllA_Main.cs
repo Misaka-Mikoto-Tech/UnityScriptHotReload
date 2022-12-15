@@ -1,4 +1,4 @@
-﻿//#define APPLY_PATCH
+﻿#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -85,6 +85,9 @@ namespace NS_Test
 
             _innerTest.FuncInnerA(5);
 
+            int valB = TestDllB_Main.Calc(1, 5);
+            Debug.Log($"valB from Ref dll = {valB}");
+
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 #else
@@ -107,6 +110,9 @@ namespace NS_Test
             FuncNew();
 
             _innerTest.FuncInnerA(5);
+
+            int valB = TestDllB_Main.Calc(1, 6);
+            Debug.Log($"valB from Ref dll = {valB}");
 
             var newCls = new NewTestClass();
             newCls.x = 1;

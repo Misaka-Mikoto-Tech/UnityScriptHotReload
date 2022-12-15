@@ -1,0 +1,16 @@
+{
+    "name": "TestDllA",
+    "rootNamespace": "",
+    "references": [
+        "GUID:57f5234d6891c8f45a207b202c58d0b9"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

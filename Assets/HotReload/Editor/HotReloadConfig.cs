@@ -27,7 +27,7 @@ namespace ScriptHotReload
         public static List<string> hotReloadAssemblies = new List<string>()
         {
             "Assembly-CSharp.dll",
-            "TestDll.dll"
+            "TestDllA.dll"
         };
 
         public const string kPatchAssemblyName      = "{0}_patch_{1}";  // {0}:assNameNoExt, {1}:PatchNo
