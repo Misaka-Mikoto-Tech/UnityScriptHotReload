@@ -198,5 +198,4 @@ namespace ScriptHotReload
                 return t.FullName;
         }
     }
-
 }

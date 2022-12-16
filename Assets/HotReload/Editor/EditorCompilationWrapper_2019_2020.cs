@@ -3,7 +3,7 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-#if !UNITY_2020_1_OR_NEWER
+#if !UNITY_2021_2_OR_NEWER
 using System;
 using System.Collections;
 using System.Collections.Generic;
