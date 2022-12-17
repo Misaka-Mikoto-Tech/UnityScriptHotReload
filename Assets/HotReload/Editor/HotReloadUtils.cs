@@ -195,7 +195,7 @@ namespace ScriptHotReload
                 return t.Name;
             }
             else
-                return t.FullName;
+                return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>');
         }
     }
 }
