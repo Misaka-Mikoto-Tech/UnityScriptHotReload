@@ -123,11 +123,11 @@ namespace ScriptHotReload
         {
             compileStatus = EditorCompilationWrapper.TickCompilationPipeline(
                         editorBuildParams.options, editorBuildParams.platformGroup, editorBuildParams.platform,
-                        editorBuildParams.subtarget, editorBuildParams.extraScriptingDefines);
+                        editorBuildParams.subtarget, editorBuildParams.extraScriptingDefines, editorBuildParams.allowBlocking);
         }
 
 
-#if UNITY_2023_1_OR_NEWER
+#if UNITY_2022_2_OR_NEWER
         /// <summary>
         /// 拦截Unity自己的Editor编译函数获取编译参数
         /// </summary>

@@ -284,6 +284,9 @@ namespace ScriptHotReload
                 if (IsLambdaStaticType(typeName))
                     continue;
 
+                if (typeName == "UnitySourceGeneratedAssemblyMonoScriptTypes") // 这个貌似是 Unity2022 记录类型信息的，处理没有意义
+                    continue;
+
                 TypeData baseType = kvT.Value;
                 if(!assemblyData.newTypes.TryGetValue(typeName, out TypeData newType))
                 {

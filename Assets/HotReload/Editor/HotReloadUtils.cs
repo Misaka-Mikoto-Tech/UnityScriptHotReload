@@ -195,7 +195,7 @@ namespace ScriptHotReload
                 return t.Name;
             }
             else
-                return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>');
+                return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>').Replace("<>", "[]"); // 最后一步是还原数组的[]
         }
     }
 }

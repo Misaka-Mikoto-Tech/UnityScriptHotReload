@@ -84,12 +84,19 @@ namespace ScriptHotReload
             EditorCompilation_Instance = tEditorCompilationInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
         }
 
-        public static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines)
+        public static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines, bool allowBlocking)
         {
+#if UNITY_2022_2_OR_NEWER
+            CompileStatus ret = (CompileStatus)miTickCompilationPipeline.Invoke(null, new object[]
+            {
+                (int)options, platfromGroup, platform, subtarget, extraScriptingDefines, allowBlocking
+            });
+#else
             CompileStatus ret = (CompileStatus)miTickCompilationPipeline.Invoke(null, new object[]
             {
                 (int)options, platfromGroup, platform, subtarget, extraScriptingDefines
             });
+#endif
             return ret;
         }
 

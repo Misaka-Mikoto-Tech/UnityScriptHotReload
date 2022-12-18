@@ -1,4 +1,4 @@
-﻿#define APPLY_PATCH
+﻿//#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -16,7 +16,7 @@ namespace NS_Test
         public int x;
         static NewTestClass()
         {
-            // 请注意，新增类的静态构造函数尽量不要影响其它类数据
+            // 请注意，新增类的静态构造函数尽量不要影响其它类数据，且此函数每次被reload都会执行
             val = 2;
             Debug.Log("NewTestClass static constructor");
         }
@@ -29,8 +29,10 @@ namespace NS_Test
 #endif
     public unsafe class TestCls
     {
-        private class InnerTest
+        public class InnerTest
         {
+            public class Inner2Cls<T> { }
+
             public int innerX;
             public void FuncInnerA(int val)
             {
@@ -90,6 +92,16 @@ namespace NS_Test
 
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
+
+        public List<Transform> GetAllDeactiveObjs()
+        {
+            return new List<Transform>();
+        }
+
+        public InnerTest.Inner2Cls<Dictionary<string, Transform>> ReturnNestGenericType()
+        {
+            return null;
+        }
 #else
         static TestCls()
         {
@@ -137,6 +149,16 @@ namespace NS_Test
         //public virtual void FuncVirtualNew()
         //{
         //}
+
+        public List<Transform> GetAllDeactiveObjs()
+        {
+            return new List<Transform>(10);
+        }
+
+        public InnerTest.Inner2Cls<Dictionary<string, Transform>> ReturnNestGenericType()
+        {
+            return new InnerTest.Inner2Cls<Dictionary<string, Transform>>();
+        }
 #endif
 
         public void TestB()
@@ -155,6 +177,8 @@ namespace NS_Test
             Debug.Log($"t.type is:{t.GetType()}");
             return new T();
         }
+
+        
 
         void PrintMethodLocation(MethodBase method)
         {

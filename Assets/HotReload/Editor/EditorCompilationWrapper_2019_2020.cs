@@ -80,7 +80,7 @@ namespace ScriptHotReload
             {
                 if (mi.Name == "CreateScriptAssemblySettings" && mi.GetParameters().Length == 3)
                     miCreateScriptAssemblySettings = mi;
-                else if (mi.Name == "CompileScripts" && mi.GetParameters().Length == 6)
+                else if (mi.Name == "CompileScripts" && mi.GetParameters().Length >= 5) // 2019:6, 2020:5
                     miCompileScripts = mi;
             }
             miScriptSettings_SetOutputDirectory = tScriptAssemblySettings.GetProperty("OutputDirectory", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
@@ -90,12 +90,19 @@ namespace ScriptHotReload
             EditorCompilation_Instance = tEditorCompilationInterface.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public).GetGetMethod().Invoke(null, null);
         }
 
-        public static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines)
+        public static CompileStatus TickCompilationPipeline(EditorScriptCompilationOptions options, BuildTargetGroup platfromGroup, BuildTarget platform, int subtarget, string[] extraScriptingDefines, bool allowBlocking)
         {
+#if UNITY_2020_1_OR_NEWER
+            CompileStatus ret = (CompileStatus)miTickCompilationPipeline.Invoke(null, new object[]
+            {
+                (int)options, platfromGroup, platform, extraScriptingDefines
+            });
+#else
             CompileStatus ret = (CompileStatus)miTickCompilationPipeline.Invoke(null, new object[]
             {
                 (int)options, platfromGroup, platform
             });
+#endif
             return ret;
         }
 
@@ -113,11 +120,19 @@ namespace ScriptHotReload
 
         public static CompileStatus CompileScriptsWithSettings(object scriptAssemblySettings)
         {
+#if UNITY_2020_1_OR_NEWER
+            var param = CompileScript.editorBuildParams;
+            CompileStatus ret =  (CompileStatus)miCompileScripts.Invoke(EditorCompilation_Instance, new object[] 
+            {
+                (int)param.options, param.platformGroup, param.platform, param.extraScriptingDefines, /*StopOnFirstError*/1
+            });
+#else
             var param = CompileScript.editorBuildParams;
             CompileStatus ret =  (CompileStatus)miCompileScripts.Invoke(EditorCompilation_Instance, new object[] 
             {
                 scriptAssemblySettings, param.outputDir, (int)param.options, /*StopOnFirstError*/1, null, null
             });
+#endif
             return ret;
         }
 
