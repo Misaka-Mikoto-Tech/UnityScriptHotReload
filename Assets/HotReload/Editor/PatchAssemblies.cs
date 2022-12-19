@@ -52,7 +52,12 @@ namespace ScriptHotReload
                 return;
 
             methodsToHook.Clear();
-            foreach(string assName in hotReloadAssemblies)
+            
+            var baseReadParam = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kBuiltinAssembliesDir) };
+            var newReadParam = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kTempCompileToDir) };
+            var writeParam = new WriterParameters() { WriteSymbols = true };
+
+            foreach (string assName in hotReloadAssemblies)
             {
                 string assNameNoExt = Path.GetFileNameWithoutExtension(assName);
 
@@ -63,12 +68,9 @@ namespace ScriptHotReload
                 if (IsFilesEqual(newDll, lastDll))
                     continue;
 
-                ReaderParameters readParam = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true };
-                WriterParameters writeParam = new WriterParameters() { WriteSymbols = true };
-
-                using (var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, readParam))
+                using (var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, baseReadParam))
                 {
-                    using(var newAssDef = AssemblyDefinition.ReadAssembly(newDll, readParam))
+                    using(var newAssDef = AssemblyDefinition.ReadAssembly(newDll, newReadParam))
                     {
                         var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
                         if (!assBuilder.DoBuild(patchNo))

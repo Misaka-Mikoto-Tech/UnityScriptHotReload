@@ -13,8 +13,10 @@ using SecurityAction = System.Security.Permissions.SecurityAction;
 /*
  * 安全相关特性，如果生成的patch dll出现 xx 字段/方法 `FieldAccessException` 异常，可以根据当前运行时开放下列其中之一
  * 
+ * #pragma warning disable 618
  * [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)] // for mono and .net framework < 4.0
  * [assembly: IgnoresAccessChecksTo("TestDll")] // for .net core, and pls modify assembly name
+ * #pragma warning restore 618
  */
 
 namespace ScriptHotReload
