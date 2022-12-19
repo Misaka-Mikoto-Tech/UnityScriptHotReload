@@ -28,15 +28,16 @@ namespace ScriptHotReload
 {
     public static class HookAssemblies
     {
-        const string kHotReloadHookTag = "kScriptHotReload";
+        const string kHotReloadHookTag_Fmt = "kScriptHotReload_{0}";
 
         public static void DoHook(Dictionary<string, List<MethodData>> methodsToHook)
         {
-            HookPool.UninstallByTag(kHotReloadHookTag);
-
             foreach(var kv in methodsToHook)
             {
                 string assName = kv.Key;
+                var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
+                HookPool.UninstallByTag(hookTag);
+
                 string patchAssPath = string.Format(kPatchDllPathFormat, Path.GetFileNameWithoutExtension(assName), GenPatchAssemblies.patchNo);
                 Assembly patchAssembly = Assembly.LoadFrom(patchAssPath);
                 if(patchAssembly == null)
@@ -57,7 +58,7 @@ namespace ScriptHotReload
                         Debug.LogError($"can not find method `{miTarget}` in [{assName}]");
                         continue;
                     }
-                    new MethodHook(miTarget, miReplace, null, kHotReloadHookTag).Install(); // TODO 不同dll使用不同的tag
+                    new MethodHook(miTarget, miReplace, null, hookTag).Install(); // TODO 不同dll使用不同的tag
                 }
             }
         }

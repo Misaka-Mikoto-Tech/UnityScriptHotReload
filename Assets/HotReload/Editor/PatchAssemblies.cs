@@ -89,7 +89,9 @@ namespace ScriptHotReload
                         newAssDef.Write(patchDll, writeParam);
                         File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
 
-                        methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
+                        var methodModified = assBuilder.assemblyData.methodModified;
+                        if(methodModified.Count > 0)
+                            methodsToHook.Add(assName, methodModified.Values.ToList());
                     }
                 }
             }
