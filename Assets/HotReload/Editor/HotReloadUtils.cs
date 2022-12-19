@@ -204,7 +204,11 @@ namespace ScriptHotReload
             var ret = new Dictionary<string, string>();
             foreach(var ass in assemblies)
             {
-                ret.TryAdd(Path.GetFileNameWithoutExtension(ass.Location), ass.Location);
+                if (ass.IsDynamic)
+                    continue;
+
+                if(!string.IsNullOrEmpty(ass.Location))
+                    ret.TryAdd(Path.GetFileNameWithoutExtension(ass.Location), ass.Location);
             }
             return ret;
         }
