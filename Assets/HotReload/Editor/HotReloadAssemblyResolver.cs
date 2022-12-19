@@ -7,6 +7,7 @@ using Mono.Cecil;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace ScriptHotReload
@@ -14,16 +15,30 @@ namespace ScriptHotReload
     public class HotReloadAssemblyResolver : IAssemblyResolver
     {
         public string baseDir { get; private set; }
+        public Dictionary<string, string> fallbackPathes { get; private set; }
+
         private bool disposedValue;
 
-        public HotReloadAssemblyResolver(string baseDir)
+        public HotReloadAssemblyResolver(string baseDir, Dictionary<string, string> fallbackPathes)
         {
             this.baseDir = baseDir;
+            this.fallbackPathes = fallbackPathes;
         }
 
         public AssemblyDefinition Resolve(AssemblyNameReference name)
         {
-            var assm = AssemblyDefinition.ReadAssembly($"{baseDir}/{name.Name}.dll");
+            string path = $"{baseDir}/{name.Name}.dll";
+            if(!File.Exists(path))
+            {
+                if (fallbackPathes.TryGetValue(name.Name, out string fallbackPath))
+                {
+                    path = fallbackPath;
+                }
+                else
+                    throw new Exception($"can not find assembly with name `{name.Name}`");
+            }
+
+            var assm = AssemblyDefinition.ReadAssembly(path);
             return assm;
         }
 

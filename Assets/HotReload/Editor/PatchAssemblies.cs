@@ -52,9 +52,14 @@ namespace ScriptHotReload
                 return;
 
             methodsToHook.Clear();
-            
-            var baseReadParam = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kBuiltinAssembliesDir) };
-            var newReadParam = new ReaderParameters(ReadingMode.Deferred) { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kTempCompileToDir) };
+
+            var fallbackPathes = GetFallbackAssemblyPaths();
+            var baseReadParam = new ReaderParameters(ReadingMode.Deferred)
+            { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kBuiltinAssembliesDir, fallbackPathes) };
+
+            var newReadParam = new ReaderParameters(ReadingMode.Deferred)
+            { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kTempCompileToDir, fallbackPathes) };
+
             var writeParam = new WriterParameters() { WriteSymbols = true };
 
             foreach (string assName in hotReloadAssemblies)
@@ -87,7 +92,6 @@ namespace ScriptHotReload
 
                         string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
                         newAssDef.Write(patchDll, writeParam);
-                        File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
 
                         var methodModified = assBuilder.assemblyData.methodModified;
                         if(methodModified.Count > 0)

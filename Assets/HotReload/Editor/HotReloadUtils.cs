@@ -197,5 +197,16 @@ namespace ScriptHotReload
             else
                 return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>').Replace("<>", "[]"); // 最后一步是还原数组的[]
         }
+
+        public static Dictionary<string, string> GetFallbackAssemblyPaths()
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            var ret = new Dictionary<string, string>();
+            foreach(var ass in assemblies)
+            {
+                ret.TryAdd(Path.GetFileNameWithoutExtension(ass.Location), ass.Location);
+            }
+            return ret;
+        }
     }
 }
