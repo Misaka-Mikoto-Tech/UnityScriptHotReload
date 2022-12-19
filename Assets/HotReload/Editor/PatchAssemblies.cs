@@ -79,7 +79,6 @@ namespace ScriptHotReload
                             return;
                         }
 
-                        // TODO copy pdb files
                         if (!File.Exists(lastDll))
                             File.Copy(baseDll, lastDll);
 
@@ -88,6 +87,7 @@ namespace ScriptHotReload
 
                         string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
                         newAssDef.Write(patchDll, writeParam);
+                        File.Copy(Path.ChangeExtension(newDll, ".pdb"), Path.ChangeExtension(patchDll, ".pdb"));
 
                         methodsToHook.Add(assName, assBuilder.assemblyData.methodModified.Values.ToList());
                     }
