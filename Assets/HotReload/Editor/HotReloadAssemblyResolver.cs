@@ -27,24 +27,15 @@ namespace ScriptHotReload
 
         public AssemblyDefinition Resolve(AssemblyNameReference name)
         {
-            string path = $"{baseDir}/{name.Name}.dll";
-            if(!File.Exists(path))
-            {
-                if (fallbackPathes.TryGetValue(name.Name, out string fallbackPath))
-                {
-                    path = fallbackPath;
-                }
-                else
-                    throw new Exception($"can not find assembly with name `{name.Name}`");
-            }
-
+            string path = GetAssemblyPath(name.Name);
             var assm = AssemblyDefinition.ReadAssembly(path);
             return assm;
         }
 
         public AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
         {
-            var assm = AssemblyDefinition.ReadAssembly($"{baseDir}/{name.Name}.dll", parameters);
+            string path = GetAssemblyPath(name.Name);
+            var assm = AssemblyDefinition.ReadAssembly(path, parameters);
             return assm;
         }
 
@@ -75,6 +66,21 @@ namespace ScriptHotReload
             // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        private string GetAssemblyPath(string name)
+        {
+            string path = $"{baseDir}/{name}.dll";
+            if (!File.Exists(path))
+            {
+                if (fallbackPathes.TryGetValue(name, out string fallbackPath))
+                {
+                    path = fallbackPath;
+                }
+                else
+                    throw new Exception($"can not find assembly with name `{name}`");
+            }
+            return path;
         }
     }
 
