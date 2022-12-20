@@ -86,16 +86,15 @@ namespace ScriptHotReload
 
                         if (!File.Exists(lastDll))
                             File.Copy(baseDll, lastDll);
-
-                        if (assBuilder.assemblyData.methodModified.Count == 0)
-                            continue;
+                        else
+                            File.Copy(newDll, lastDll, true);
 
                         string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
                         newAssDef.Write(patchDll, writeParam);
 
+                        // 有可能数量为0，此时虽然与原始dll无差异，但是与上一次编译有差异，也需要处理（清除已hook函数）
                         var methodModified = assBuilder.assemblyData.methodModified;
-                        if(methodModified.Count > 0)
-                            methodsToHook.Add(assName, methodModified.Values.ToList());
+                        methodsToHook.Add(assName, methodModified.Values.ToList());
                     }
                 }
             }
