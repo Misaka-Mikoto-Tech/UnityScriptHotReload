@@ -34,7 +34,12 @@ namespace ScriptHotReload
 
         public static int patchNo { get; private set; } = 0;
 
-        private static Dictionary<string, AssemblyData> _assemblyDatas = new Dictionary<string, AssemblyData>();
+        [InitializeOnLoadMethod]
+        static void Init()
+        {
+            patchNo = 0;
+            methodsToHook.Clear();
+        }
 
         [MenuItem("ScriptHotReload/PatchAssemblies")]
         public static void DoGenPatchAssemblies()
@@ -54,6 +59,7 @@ namespace ScriptHotReload
             methodsToHook.Clear();
 
             var fallbackPathes = GetFallbackAssemblyPaths();
+            GenPatcherInputArgsFile();
             var baseReadParam = new ReaderParameters(ReadingMode.Deferred)
             { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kBuiltinAssembliesDir, fallbackPathes) };
 
@@ -111,6 +117,50 @@ namespace ScriptHotReload
                 patchNo++;
 
             Debug.Log("<color=yellow>热重载完成</color>");
+        }
+
+        [Serializable]
+        public class InputArgs
+        {
+            public int patchNo;
+            public string workDir;
+            public string[] assembliesToPatch;
+            public string patchAssemblyNameFmt;
+            public string tempScriptDir;
+            public string tempCompileToDir;
+            public string builtinAssembliesDir;
+            public string lastDllPathFmt;
+            public string patchDllPathFmt;
+            public string lambdaWrapperBackend;
+
+            public string[] fallbackAssemblyPathes;
+        }
+
+        [Serializable]
+        public class OutputReport
+        {
+            public bool success;
+            public List<string> messages;
+            public Dictionary<string, List<string>> modifiedMethods;
+        }
+
+        static void GenPatcherInputArgsFile()
+        {
+            var inputArgs = new InputArgs();
+            inputArgs.patchNo = patchNo;
+            inputArgs.workDir = Environment.CurrentDirectory;
+            inputArgs.assembliesToPatch = hotReloadAssemblies.ToArray();
+            inputArgs.patchAssemblyNameFmt = kPatchAssemblyName;
+            inputArgs.tempScriptDir = kTempScriptDir;
+            inputArgs.tempCompileToDir = kTempCompileToDir;
+            inputArgs.builtinAssembliesDir = kBuiltinAssembliesDir;
+            inputArgs.lastDllPathFmt = kLastDllPathFormat;
+            inputArgs.patchDllPathFmt = kPatchDllPathFormat;
+            inputArgs.lambdaWrapperBackend = kLambdaWrapperBackend;
+            inputArgs.fallbackAssemblyPathes = GetFallbackAssemblyPaths().Values.ToArray();
+
+            string jsonStr = JsonUtility.ToJson(inputArgs, true);
+            File.WriteAllText($"{kTempScriptDir}/InputArgs.json", jsonStr);
         }
     }
 
