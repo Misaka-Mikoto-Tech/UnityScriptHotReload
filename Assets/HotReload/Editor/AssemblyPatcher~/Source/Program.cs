@@ -29,16 +29,16 @@ namespace AssemblyPatcher
             }
 
             Stopwatch sw = new Stopwatch();
-            var patcher = new Patcher(args[0], args[1]);
             sw.Start();
             bool success = false;
             try
             {
+                var patcher = new Patcher(args[0], args[1]);
                 success = patcher.DoPatch();
             }
             catch(Exception ex)
             {
-                Debug.LogError($"Patch Fail:{ex.Message}");
+                Debug.LogError($"Patch Fail:{ex.Message}, stack:{ex.StackTrace}");
             }
             sw.Stop();
             Debug.LogDebug($"执行Patch耗时 {sw.ElapsedMilliseconds} ms");

@@ -10,22 +10,22 @@ namespace AssemblyPatcher
     {
         public static void Log(string msg)
         {
-            Console.WriteLine($"[Info]{msg}");
+            Console.WriteLine($"[Info]{msg.Replace("\r\n", "<br/>")}");
         }
 
         public static void LogWarning(string msg)
         {
-            Console.WriteLine($"[Warning]{msg}");
+            Console.WriteLine($"[Warning]{msg.Replace("\r\n", "<br/>")}");
         }
 
         public static void LogError(string msg)
         {
-            Console.WriteLine($"[Error]{msg}");
+            Console.WriteLine($"[Error]{msg.Replace("\r\n", "<br/>")}");
         }
 
         public static void LogDebug(string msg)
         {
-            Console.WriteLine($"[Debug]{msg}");
+            Console.WriteLine($"[Debug]{msg.Replace("\r\n", "<br/>")}");
         }
 
         public static void Assert(bool condition)

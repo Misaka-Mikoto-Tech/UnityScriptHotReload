@@ -103,6 +103,7 @@ namespace ScriptHotReload
                 string line = sr.ReadLine();
                 while (line != null)
                 {
+                    line = line.Replace("<br/>", "\r\n");
                     if (line.StartsWith("[Info]"))
                         UnityEngine.Debug.Log($"<color=lime>[Patcher] {line.Substring("[Info]".Length)}</color>");
                     else if (line.StartsWith("[Warning]"))

@@ -20,11 +20,6 @@ using System.Security.Permissions;
 using SecurityAction = System.Security.Permissions.SecurityAction;
 using OpCodes = Mono.Cecil.Cil.OpCodes;
 
-#pragma warning disable SYSLIB0003
-// 请注意, 此 attribute 不能删除，这是给目标dll当模板用的
-[assembly: SecurityPermission(System.Security.Permissions.SecurityAction.RequestMinimum, SkipVerification = true)]
-#pragma warning restore SYSLIB0003
-
 namespace AssemblyPatcher
 {
     public class AssemblyData
@@ -452,15 +447,9 @@ namespace AssemblyPatcher
             _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
 
             {// 给Assembly添加Attribute以允许IL访问外部类的私有字段
-                using(var patcherAssemDef = AssemblyDefinition.ReadAssembly(MethodBase.GetCurrentMethod().DeclaringType.Assembly.Location))
+                // IgnoresAccessChecksTo(AssemblyName)
                 {
-                    // 使用当前程序集的 security attributes 替换目标数据（构造这些数据太复杂，但当前程序集我们可以提前定义模板）
-                    _newAssDef.SecurityDeclarations.Clear();
-                    foreach (var sd in patcherAssemDef.SecurityDeclarations)
-                        _newAssDef.SecurityDeclarations.Add(sd);
-
-                    // IgnoresAccessChecksTo
-                    var newAttr = _newAssDef.MainModule.ImportReference(typeof(IgnoresAccessChecksToAttribute).GetConstructor(new Type[] {typeof(string)}));
+                    var newAttr = _newAssDef.MainModule.ImportReference(typeof(IgnoresAccessChecksToAttribute).GetConstructor(new Type[] { typeof(string) }));
                     var attr = new CustomAttribute(newAttr);
                     attr.ConstructorArguments.Add(new CustomAttributeArgument(_newAssDef.MainModule.ImportReference(typeof(string)), _baseAssDef.Name.Name));
                     _newAssDef.CustomAttributes.Add(attr);
