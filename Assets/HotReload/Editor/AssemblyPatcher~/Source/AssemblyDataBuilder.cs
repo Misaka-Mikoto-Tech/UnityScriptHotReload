@@ -458,7 +458,11 @@ namespace AssemblyPatcher
                     _newAssDef.SecurityDeclarations.Clear();
                     foreach (var sd in patcherAssemDef.SecurityDeclarations)
                         _newAssDef.SecurityDeclarations.Add(sd);
-                    // TODO for .net core, modify assembly name of `IgnoresAccessChecksTo` with code
+
+                    var newAttr = _newAssDef.MainModule.ImportReference(typeof(IgnoresAccessChecksToAttribute).GetConstructor(new Type[] {typeof(string)}));
+                    var attr = new CustomAttribute(newAttr);
+                    attr.ConstructorArguments.Add(new CustomAttributeArgument(_newAssDef.MainModule.ImportReference(typeof(string)), _baseAssDef.Name.Name));
+                    _newAssDef.CustomAttributes.Add(attr);
                 }
             }
 
