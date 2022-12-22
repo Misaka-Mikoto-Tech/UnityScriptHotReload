@@ -10,7 +10,6 @@ using UnityEngine;
 using System.Security.Cryptography;
 using System;
 using System.Reflection;
-using Mono.Cecil;
 using UnityEditor;
 
 using static ScriptHotReload.HotReloadConfig;

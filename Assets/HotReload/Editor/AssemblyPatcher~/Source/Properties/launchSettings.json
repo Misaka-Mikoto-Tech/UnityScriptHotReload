@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "AssemblyPatcher": {
+      "commandName": "Project",
+      "commandLineArgs": "G:\\\\Project\\\\UnityScriptHotReload\\\\Temp\\\\ScriptHotReload\\\\InputArgs.json G:\\\\Project\\\\UnityScriptHotReload\\\\Temp\\\\ScriptHotReload\\\\OutputReport.json"
+    }
+  }
+}

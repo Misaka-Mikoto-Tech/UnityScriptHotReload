@@ -16,8 +16,6 @@ using MonoHook;
 using System.Runtime.CompilerServices;
 using System;
 using System.Reflection.Emit;
-using Mono;
-using Mono.Cecil;
 using System.Linq;
 using System.Text;
 
@@ -30,7 +28,7 @@ namespace ScriptHotReload
     {
         const string kHotReloadHookTag_Fmt = "kScriptHotReload_{0}";
 
-        public static void DoHook(Dictionary<string, List<MethodData>> methodsToHook)
+        public static void DoHook(Dictionary<string, List<MethodBase>> methodsToHook)
         {
             foreach(var kv in methodsToHook)
             {
@@ -46,9 +44,9 @@ namespace ScriptHotReload
                     continue;
                 }
 
-                foreach(var data in kv.Value)
+                foreach(var method in kv.Value)
                 {
-                    MethodBase miTarget = data.methodInfo;
+                    MethodBase miTarget = method;
                     if (miTarget.ContainsGenericParameters) // 泛型暂时不处理
                         continue;
 

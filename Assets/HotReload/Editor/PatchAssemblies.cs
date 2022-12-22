@@ -3,6 +3,9 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
+
+//#define PATCHER_DEBUG
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -16,13 +19,12 @@ using MonoHook;
 using System.Runtime.CompilerServices;
 using System;
 using System.Reflection.Emit;
-using Mono;
-using Mono.Cecil;
 using System.Linq;
 using System.Text;
 
 using static ScriptHotReload.HotReloadUtils;
 using static ScriptHotReload.HotReloadConfig;
+using System.Diagnostics;
 
 namespace ScriptHotReload
 {
@@ -30,7 +32,7 @@ namespace ScriptHotReload
     {
         public static bool codeHasChanged => methodsToHook.Count > 0;
 
-        public static Dictionary<string, List<MethodData>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodData>>();
+        public static Dictionary<string, List<MethodBase>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodBase>>();
 
         public static int patchNo { get; private set; } = 0;
 
@@ -57,58 +59,14 @@ namespace ScriptHotReload
                 return;
 
             methodsToHook.Clear();
-
-            var fallbackPathes = GetFallbackAssemblyPaths();
             GenPatcherInputArgsFile();
-            var baseReadParam = new ReaderParameters(ReadingMode.Deferred)
-            { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kBuiltinAssembliesDir, fallbackPathes) };
+            if (RunAssemblyPatchProcess() != 0)
+                return;
 
-            var newReadParam = new ReaderParameters(ReadingMode.Deferred)
-            { ReadSymbols = true, AssemblyResolver = new HotReloadAssemblyResolver(kTempCompileToDir, fallbackPathes) };
-
-            var writeParam = new WriterParameters() { WriteSymbols = true };
-
-            foreach (string assName in hotReloadAssemblies)
+            ParseOutputReport();
+            if (methodsToHook.Count == 0)
             {
-                string assNameNoExt = Path.GetFileNameWithoutExtension(assName);
-
-                string baseDll = $"{kBuiltinAssembliesDir}/{assName}";
-                string lastDll = string.Format(kLastDllPathFormat, assNameNoExt);
-                string newDll = $"{kTempCompileToDir}/{assName}";
-
-                if (IsFilesEqual(newDll, lastDll))
-                    continue;
-
-                using (var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, baseReadParam))
-                {
-                    using(var newAssDef = AssemblyDefinition.ReadAssembly(newDll, newReadParam))
-                    {
-                        var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
-                        if (!assBuilder.DoBuild(patchNo))
-                        {
-                            Debug.LogError($"[{assName}]不符合热重载条件，停止重载");
-                            return;
-                        }
-
-                        if (!File.Exists(lastDll))
-                            File.Copy(baseDll, lastDll);
-                        else
-                            File.Copy(newDll, lastDll, true);
-
-                        string patchDll = string.Format(kPatchDllPathFormat, assNameNoExt, patchNo);
-                        newAssDef.Write(patchDll, writeParam);
-
-                        // 有可能数量为0，此时虽然与原始dll无差异，但是与上一次编译有差异，也需要处理（清除已hook函数）
-                        var methodModified = assBuilder.assemblyData.methodModified;
-                        methodsToHook.Add(assName, methodModified.Values.ToList());
-                    }
-                }
-            }
-            GC.Collect();
-            
-            if(methodsToHook.Count == 0)
-            {
-                Debug.Log("代码没有发生改变，不执行热重载");
+                UnityEngine.Debug.Log("代码没有发生改变，不执行热重载");
                 return;
             }
 
@@ -116,7 +74,63 @@ namespace ScriptHotReload
             if (methodsToHook.Count > 0)
                 patchNo++;
 
-            Debug.Log("<color=yellow>热重载完成</color>");
+            UnityEngine.Debug.Log("<color=yellow>热重载完成</color>");
+        }
+
+        private static int RunAssemblyPatchProcess()
+        {
+            var startInfo = new ProcessStartInfo();
+            startInfo.FileName = Path.GetDirectoryName(GetThisFilePath()) + "/AssemblyPatcher~/AssemblyPatcher.exe";
+#if PATCHER_DEBUG
+            startInfo.Arguments = $"{kAssemblyPatcherInput} {kAssemblyPatcherOutput} debug";
+            startInfo.CreateNoWindow = false;
+#else
+            startInfo.Arguments = $"{kAssemblyPatcherInput} {kAssemblyPatcherOutput}";
+            startInfo.CreateNoWindow = true;
+#endif
+            startInfo.UseShellExecute = false;
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.StandardInputEncoding = System.Text.UTF8Encoding.UTF8;
+            startInfo.StandardOutputEncoding = System.Text.UTF8Encoding.UTF8;
+            startInfo.StandardErrorEncoding = System.Text.UTF8Encoding.UTF8;
+            Process procPathcer = new Process();
+            procPathcer.StartInfo = startInfo;
+            procPathcer.Start();
+
+            Action<StreamReader> outputProcMsgs = sr =>
+            {
+                string line = sr.ReadLine();
+                while (line != null)
+                {
+                    if (line.StartsWith("[Info]"))
+                        UnityEngine.Debug.Log($"<color=lime>[Patcher] {line.Substring("[Info]".Length)}</color>");
+                    else if (line.StartsWith("[Warning]"))
+                        UnityEngine.Debug.LogWarning($"<color=orange>[Patcher] {line.Substring("[Warning]".Length)}</color>");
+                    else if (line.StartsWith("[Error]"))
+                        UnityEngine.Debug.LogError($"[Patcher] {line.Substring("[Error]".Length)}");
+
+#if PATCHER_DEBUG || true
+                    else if (line.StartsWith("[Debug]"))
+                        UnityEngine.Debug.Log($"<color=yellow>[Patcher] {line.Substring("[Debug]".Length)}</color>");
+#endif
+                    else
+                        UnityEngine.Debug.Log($"<color=white>[Patcher] {line}</color>");
+
+                    line = sr.ReadLine();
+                }
+            };
+
+            using (var sr = procPathcer.StandardOutput) { outputProcMsgs(sr); }
+            using (var sr = procPathcer.StandardError) { outputProcMsgs(sr); }
+
+            int exitCode = -1;
+            if (procPathcer.WaitForExit(60 * 1000)) // 最长等待1分钟
+                exitCode = procPathcer.ExitCode;
+            else
+                procPathcer.Kill();
+
+            return exitCode;
         }
 
         [Serializable]
@@ -136,14 +150,6 @@ namespace ScriptHotReload
             public string[] fallbackAssemblyPathes;
         }
 
-        [Serializable]
-        public class OutputReport
-        {
-            public bool success;
-            public List<string> messages;
-            public Dictionary<string, List<string>> modifiedMethods;
-        }
-
         static void GenPatcherInputArgsFile()
         {
             var inputArgs = new InputArgs();
@@ -160,7 +166,78 @@ namespace ScriptHotReload
             inputArgs.fallbackAssemblyPathes = GetFallbackAssemblyPaths().Values.ToArray();
 
             string jsonStr = JsonUtility.ToJson(inputArgs, true);
-            File.WriteAllText($"{kTempScriptDir}/InputArgs.json", jsonStr);
+            File.WriteAllText(kAssemblyPatcherInput, jsonStr);
+        }
+
+        [Serializable]
+        public class OutputReport
+        {
+            [Serializable]
+            public class MethodData
+            {
+                public string name;
+                public string type;
+                public string assembly;
+                public bool isConstructor;
+                public bool isGeneric;
+                public bool isPublic;
+                public bool isStatic;
+                public bool isLambda;
+                public bool ilChanged;
+                public string document;
+                public string returnType;
+                public string[] paramTypes;
+            }
+            public int patchNo;
+            public string[] assemblyChangedFromLast;
+            public List<MethodData> methodsNeedHook;
+        }
+
+        static void ParseOutputReport()
+        {
+            methodsToHook.Clear();
+
+            if (!File.Exists(kAssemblyPatcherOutput))
+                throw new Exception($"can not find output report file `{kAssemblyPatcherOutput}`");
+
+            string text = File.ReadAllText(kAssemblyPatcherOutput);
+            var outputReport = JsonUtility.FromJson<OutputReport>(text);
+
+            foreach(var assName in outputReport.assemblyChangedFromLast)
+            {
+                methodsToHook.Add(assName, new List<MethodBase>());
+            }
+
+            foreach(var data in outputReport.methodsNeedHook)
+            {
+                if (data.isGeneric)
+                    continue;
+
+                Type t = Type.GetType(data.type, true);
+
+                BindingFlags flags = BindingFlags.Default;
+                flags |= data.isPublic ? BindingFlags.Public : BindingFlags.NonPublic;
+                flags |= data.isStatic ? BindingFlags.Static : BindingFlags.Instance;
+
+                Type[] paramTypes = new Type[data.paramTypes.Length];
+                for(int i = 0, imax = paramTypes.Length; i < imax; i++)
+                {
+                    paramTypes[i] = Type.GetType(data.paramTypes[i], true);
+                }
+                MethodBase method;
+                if (data.isConstructor)
+                    method = t.GetConstructor(flags, null, paramTypes, null);
+                else
+                    method = t.GetMethod(data.name, flags, null, paramTypes, null);
+
+                if (method == null)
+                    throw new Exception($"can not find method `{data.name}`");
+
+                if(!methodsToHook.TryGetValue(data.assembly, out List<MethodBase> list))
+                    throw new Exception($"unexpected assembly name `{data.assembly}`");
+
+                list.Add(method);
+            }
         }
     }
 

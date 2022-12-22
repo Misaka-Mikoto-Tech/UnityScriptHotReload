@@ -10,10 +10,9 @@ using UnityEngine;
 using System.Security.Cryptography;
 using System;
 using System.Reflection;
-using Mono.Cecil;
 using UnityEditor;
-using Mono.Cecil.Cil;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace ScriptHotReload
 {
@@ -58,22 +57,6 @@ namespace ScriptHotReload
                 File.Delete(file);
         }
 
-        public static BindingFlags BuildBindingFlags(MethodDefinition definition)
-        {
-            BindingFlags flags = BindingFlags.Default;
-            if (definition.IsPublic)
-                flags |= BindingFlags.Public;
-            else
-                flags |= BindingFlags.NonPublic;
-
-            if (definition.IsStatic)
-                flags |= BindingFlags.Static;
-            else
-                flags |= BindingFlags.Instance;
-
-            return flags;
-        }
-
         public static BindingFlags BuildBindingFlags(MethodBase methodInfo)
         {
             BindingFlags flags = BindingFlags.Default;
@@ -88,55 +71,6 @@ namespace ScriptHotReload
                 flags |= BindingFlags.Instance;
 
             return flags;
-        }
-
-        /// <summary>
-        /// 以 MethodDefinition 为参数或者 MethodInfo
-        /// </summary>
-        /// <param name="t"></param>
-        /// <param name="definition"></param>
-        /// <returns></returns>
-        /// <remarks>TODO 优化性能</remarks>
-        public static MethodBase GetMethodInfoSlow(Type t, MethodDefinition definition)
-        {
-            var flags = BuildBindingFlags(definition);
-            bool isConstructor = definition.IsConstructor;
-            MethodBase[] mis = isConstructor ? (MethodBase[])t.GetConstructors(flags) : t.GetMethods(flags);
-
-            ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
-            foreach(var mi in mis)
-            {
-                if (!isConstructor)
-                {
-                    if (mi.Name != definition.Name)
-                        continue;
-                    if (GetTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
-                        continue;
-                }
-                else if (mi.IsStatic != definition.IsStatic)
-                    continue;
-
-                ParameterInfo[] piArr = mi.GetParameters();
-                if(piArr.Length == defParaArr.Length)
-                {
-                    bool found = true;
-                    for(int i = 0, imax = piArr.Length; i < imax; i++)
-                    {
-                        var defPara = defParaArr[i];
-                        var pi = piArr[i];
-
-                        if (GetTypeName(pi.ParameterType) != defPara.ParameterType.FullName)
-                        {
-                            found = false;
-                            break;
-                        }
-                    }
-
-                    if(found)
-                        return mi;
-                }
-            }
-            return null;
         }
 
         /// <summary>
@@ -164,30 +98,6 @@ namespace ScriptHotReload
             return null;
         }
 
-        public static bool IsLambdaStaticType(TypeReference typeReference)
-        {
-            return typeReference.ToString().EndsWith(HotReloadConfig.kLambdaWrapperBackend, StringComparison.Ordinal);
-        }
-
-        public static bool IsLambdaStaticType(string typeSignature)
-        {
-            return typeSignature.EndsWith(HotReloadConfig.kLambdaWrapperBackend, StringComparison.Ordinal);
-        }
-
-        public static bool IsLambdaMethod(MethodReference methodReference)
-        {
-            return methodReference.Name.StartsWith("<");
-        }
-
-        public static Document GetDocOfMethod(MethodDefinition definition)
-        {
-            var seqs = definition?.DebugInformation?.SequencePoints;
-            if (seqs.Count > 0)
-                return seqs[0].Document;
-            else
-                return null;
-        }
-
         private static string GetTypeName(Type t)
         {
             if (t.ContainsGenericParameters)
@@ -211,6 +121,11 @@ namespace ScriptHotReload
                     ret.TryAdd(Path.GetFileNameWithoutExtension(ass.Location), ass.Location);
             }
             return ret;
+        }
+
+        public static string GetThisFilePath([CallerFilePath] string path = null)
+        {
+            return path;
         }
     }
 }
