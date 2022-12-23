@@ -358,7 +358,10 @@ namespace AssemblyPatcher
                         ilChanged = true;
                     else
                     {
-                        // TODO 通过 method RVA/codeSize 对比，method header 只有两种size，1 or 12
+                        /*
+                         * TODO 通过 method RVA/codeSize 对比，method header 只有两种size，1 or 12
+                         * 2022-12-23: 经测试不能直接对比 method body 的二进制，原因是类的成员变量RID每次编译会不一致，导致 ldfld 之类的指令引用的编号发生变化
+                         */
                         var arrBaseIns = baseIns.ToArray();
                         var arrNewIns = newIns.ToArray();
                         for (int l = 0, lmax = arrBaseIns.Length; l < lmax; l++)
@@ -384,7 +387,9 @@ namespace AssemblyPatcher
             HashSet<Document> docChanged = new HashSet<Document>();
             foreach(var kv in assemblyData.methodsNeedHook)
             {
-                docChanged.Add(kv.Value.baseMethod.document);
+                var doc = kv.Value.baseMethod.document;
+                if(doc != null)
+                    docChanged.Add(doc);
             }
 
             foreach(var doc in docChanged)
