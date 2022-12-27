@@ -31,7 +31,7 @@ namespace AssemblyPatcher
         public Dictionary<string, TypeData>     addedTypes = new Dictionary<string, TypeData>(); // 新增类型，不包括自动生成的 lambda表达式类
         public Dictionary<string, MethodData>   allBaseMethods    = new Dictionary<string, MethodData>(); // 用于快速搜索
         public Dictionary<string, HookedMethodInfo>   methodsNeedHook  = new Dictionary<string, HookedMethodInfo>();
-        public Dictionary<Document, List<MethodData>> doc2methodsOfBase = new Dictionary<Document, List<MethodData>>(); // baseTypes 中 doc 与 method的映射
+        public Dictionary<Document, List<MethodData>> doc2methodsOfNew = new Dictionary<Document, List<MethodData>>(); // newTypes 中 doc 与 method的映射
     }
 
     public class TypeData
@@ -156,26 +156,29 @@ namespace AssemblyPatcher
             // 全局处理类型和方法
             foreach(var kvT in assemblyData.newTypes)
             {
-                if (!assemblyData.baseTypes.TryGetValue(kvT.Key, out TypeData baseType))
+                string typeName = kvT.Key;
+                TypeData typeData = kvT.Value;
+
+                if (!assemblyData.baseTypes.ContainsKey(typeName))
                 {
-                    assemblyData.addedTypes.Add(kvT.Key, kvT.Value);
+                    assemblyData.addedTypes.Add(typeName, typeData);
                     continue;
                 }
 
-                if (IsLambdaStaticType(kvT.Key))
+                if (IsLambdaStaticType(typeName))
                     continue;
 
-                foreach(var kvM in baseType.methods)
+                foreach(var kvM in typeData.methods)
                 {
                     var methodData = kvM.Value;
                     var doc = methodData.document;
                     if (doc == null || methodData.isLambda)
                         continue;
 
-                    if (!assemblyData.doc2methodsOfBase.TryGetValue(doc, out List<MethodData> lst))
+                    if (!assemblyData.doc2methodsOfNew.TryGetValue(doc, out List<MethodData> lst))
                     {
                         lst = new List<MethodData>();
-                        assemblyData.doc2methodsOfBase.Add(doc, lst);
+                        assemblyData.doc2methodsOfNew.Add(doc, lst);
                     }
 
                     lst.Add(kvM.Value);
@@ -376,14 +379,14 @@ namespace AssemblyPatcher
             HashSet<Document> docChanged = new HashSet<Document>();
             foreach(var kv in assemblyData.methodsNeedHook)
             {
-                var doc = kv.Value.baseMethod.document;
+                var doc = kv.Value.newMethod.document;
                 if(doc != null)
                     docChanged.Add(doc);
             }
 
             foreach(var doc in docChanged)
             {
-                if(assemblyData.doc2methodsOfBase.TryGetValue(doc, out List<MethodData> lstNewMethods))
+                if(assemblyData.doc2methodsOfNew.TryGetValue(doc, out List<MethodData> lstNewMethods))
                 {
                     foreach(var newMethod in lstNewMethods)
                     {
