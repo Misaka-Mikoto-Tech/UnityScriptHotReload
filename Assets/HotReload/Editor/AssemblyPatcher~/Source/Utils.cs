@@ -206,5 +206,31 @@ namespace AssemblyPatcher
             }
             return ret;
         }
+
+
+        static string s_corlibLibName = typeof(int).Assembly.FullName;
+        static string s_systemLibName = typeof(System.Uri).Assembly.FullName;
+        static string s_systemXmlLibName = typeof(System.Xml.XmlText).Assembly.FullName;
+
+        static string s_corlibLibSig = ", " + s_corlibLibName;
+        static string s_systemLibSig = ", " + s_systemLibName;
+        static string s_systemXmlLibSig = ", " + s_systemXmlLibName;
+        static string s_defaultSig = ", Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
+
+        public static string GetRuntimeTypeName(Type t, bool isGeneric)
+        {
+            if (isGeneric)
+                return t.ToString();
+
+            string fullName = t.FullName;
+            bool isCorlib = t.Assembly.FullName.Contains(s_corlibLibName);
+
+            // 此处不能使用原始 dll 名称，因为 .net core 和 .net framework 的同名类型的定义位于不同的dll中
+            // 且 mscorlib.dll 中的类型可以不写明dll名称
+            fullName = fullName.Replace(s_corlibLibSig, "").Replace(s_systemLibSig, "System").Replace(s_systemXmlLibSig, "System.Xml").Replace(s_defaultSig, "");
+            if (!isCorlib)
+                fullName += ", " + t.Assembly.GetName().Name;
+            return fullName;
+        }
     }
 }

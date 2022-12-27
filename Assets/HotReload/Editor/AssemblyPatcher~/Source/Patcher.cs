@@ -32,7 +32,14 @@ namespace AssemblyPatcher
             sw.Start();
             foreach (var kv in _inputArgs.fallbackAssemblyPathes)
             {
-                Assembly.LoadFrom(kv.Value);
+                try
+                {
+                    Assembly.LoadFrom(kv.Value);
+                }
+                catch(Exception ex)
+                {
+                    Debug.LogError($"load dll fail:{kv.Value}\r\n:{ex.Message}\r\n{ex.StackTrace}");
+                }
             }
             sw.Stop();
             Console.WriteLine($"[Debug]载入相关dll耗时 {sw.ElapsedMilliseconds} ms");
@@ -57,6 +64,12 @@ namespace AssemblyPatcher
                 string baseDll = $"{_inputArgs.builtinAssembliesDir}/{assName}";
                 string lastDll = string.Format(_inputArgs.lastDllPathFmt, assNameNoExt);
                 string newDll = $"{_inputArgs.tempCompileToDir}/{assName}";
+
+                if(!File.Exists(baseDll))
+                {
+                    Debug.LogError($"file `{baseDll}` does not exists");
+                    continue;
+                }
 
                 if (IsFilesEqual(newDll, lastDll))
                     continue;
@@ -107,7 +120,7 @@ namespace AssemblyPatcher
             args.fallbackAssemblyPathes = new Dictionary<string, string>();
             foreach(string ass in fallbackAsses)
             {
-                args.fallbackAssemblyPathes.TryAdd(Path.GetFileName(ass), ass);
+                args.fallbackAssemblyPathes.TryAdd(Path.GetFileNameWithoutExtension(ass), ass);
             }
 
             InputArgs.Instance = args;

@@ -91,7 +91,7 @@ namespace ScriptHotReload
             startInfo.UseShellExecute = false;
             startInfo.RedirectStandardOutput = true;
             startInfo.RedirectStandardError = true;
-            startInfo.StandardInputEncoding = System.Text.UTF8Encoding.UTF8;
+            //startInfo.StandardInputEncoding = System.Text.UTF8Encoding.UTF8;
             startInfo.StandardOutputEncoding = System.Text.UTF8Encoding.UTF8;
             startInfo.StandardErrorEncoding = System.Text.UTF8Encoding.UTF8;
             Process procPathcer = new Process();

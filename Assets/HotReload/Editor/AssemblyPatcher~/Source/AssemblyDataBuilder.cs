@@ -69,7 +69,7 @@ namespace AssemblyPatcher
 
             JSONObject ret = new JSONObject();
             ret["name"] = methodInfo.Name;
-            ret["type"] = GetTypeName(methodInfo.DeclaringType, methodInfo.ContainsGenericParameters);
+            ret["type"] = GetRuntimeTypeName(methodInfo.DeclaringType, methodInfo.ContainsGenericParameters);
             ret["assembly"] = typeData.definition.Module.Name;
             ret["isConstructor"] = methodInfo.IsConstructor;
             ret["isGeneric"] = methodInfo.ContainsGenericParameters;
@@ -87,21 +87,10 @@ namespace AssemblyPatcher
             var paras = methodInfo.GetParameters();
             for(int i = 0, imax = paras.Length; i < imax; i++)
             {
-                paraArr[i] = GetTypeName(paras[i].ParameterType, methodInfo.ContainsGenericParameters);
+                paraArr[i] = GetRuntimeTypeName(paras[i].ParameterType, methodInfo.ContainsGenericParameters);
             }
 
             return ret;
-        }
-
-        string GetTypeName(Type t, bool isGeneric)
-        {
-            string moduleName = t.Module.Name;
-
-            // 此处不能附加系统 dll 名称，因为 .net core 和 .net framework 的同名类型的定义位于不同的dll中
-            if (isGeneric || moduleName.StartsWith("System.", StringComparison.Ordinal))
-                return t.ToString();
-            else
-                return $"{t},{moduleName}";
         }
     }
 
