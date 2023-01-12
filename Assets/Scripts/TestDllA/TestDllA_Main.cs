@@ -48,7 +48,9 @@ namespace NS_Test
         public string str { get; set; } = "default str";
         public static string str2 { get { return (s_val + 2).ToString(); } }
 
+        private GameObject _go;
         private InnerTest _innerTest = new InnerTest();
+        private TestClsG<TestCls>.TestClsGInner<TestDll_2> _genericFiledTest;
 
         public Action<int> act = x =>
         {
@@ -62,6 +64,11 @@ namespace NS_Test
             Debug.Log(x * 3);
             Debug.Log(str2);
         };
+
+        public TestCls(GameObject go)
+        {
+            _go = go;
+        }
 
         public void Init()
         {
@@ -163,6 +170,31 @@ namespace NS_Test
 
         public void TestB()
         {
+            Type t = typeof(int);
+            Debug.Log(t.Name);
+
+            t = typeof(TestCls);
+            Debug.Log(t.Name);
+
+            Type tG = typeof(TestClsG<TestCls>.TestClsGInner<string>);
+            Debug.Log(tG.Name);
+
+            _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
+            _genericFiledTest.innerField_i = 257;
+            _genericFiledTest.innerField_V = new TestDll_2();
+
+            var val0 = _genericFiledTest.ShowInner(2);
+            var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
+            var val2 = _genericFiledTest.FuncG(this, "test words", null);
+            
+
+            var tmpGenericObj = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
+            Func<TestCls, string, TestDll_2, TestDll_2> funcG = tmpGenericObj.FuncG;
+            var val3 = funcG(this, "test words 2", null);
+
+
+            var comp = _go.GetComponent<MonoTestA>();
+            comp.ShowText();
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 
@@ -197,15 +229,29 @@ namespace NS_Test
     {
         public class TestClsGInner<V>
         {
+            public int innerField_i;
+            public V innerField_V;
+
             public int ShowInner(int x)
             {
+                var val1 = ShowGInner<long>(default(T), default(V), 2345);
+                var val2 = FuncG(default(T), "abc", default(V));
+#if !APPLY_PATCH
                 return x + 1;
+#else
+                return x + 2;
+#endif
             }
 
-            public V ShowGInner<U>(T arg0, V arg1, U arg2)
+            public V ShowGInner<UK>(T arg0, V arg1, UK arg2)
             {
-                Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(U).GetType()}");
+                Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(UK).GetType()}");
                 return arg1;
+            }
+
+            public V FuncG(T arg0, string arg1, V arg2)
+            {
+                return arg2;
             }
         }
 
