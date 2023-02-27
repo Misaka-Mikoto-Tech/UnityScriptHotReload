@@ -9,8 +9,7 @@
       "AssemblyPatcher/1.0.0": {
         "dependencies": {
           "NHibernate": "5.4.0",
-          "Mono.Cecil": "0.11.4.0",
-          "Mono.Cecil.Pdb": "0.11.4.0"
+          "dnlib": "3.6.0"
         },
         "runtime": {
           "AssemblyPatcher.dll": {}
@@ -886,20 +885,9 @@
           "System.Xml.ReaderWriter": "4.3.0"
         }
       },
-      "Mono.Cecil/0.11.4.0": {
+      "dnlib/3.6.0": {
         "runtime": {
-          "Mono.Cecil.dll": {
-            "assemblyVersion": "0.11.4.0",
-            "fileVersion": "0.11.4.0"
-          }
-        }
-      },
-      "Mono.Cecil.Pdb/0.11.4.0": {
-        "runtime": {
-          "Mono.Cecil.Pdb.dll": {
-            "assemblyVersion": "0.11.4.0",
-            "fileVersion": "0.11.4.0"
-          }
+          "dnlib.dll": {}
         }
       }
     }
@@ -1526,13 +1514,8 @@
       "path": "system.xml.xdocument/4.3.0",
       "hashPath": "system.xml.xdocument.4.3.0.nupkg.sha512"
     },
-    "Mono.Cecil/0.11.4.0": {
-      "type": "reference",
-      "serviceable": false,
-      "sha512": ""
-    },
-    "Mono.Cecil.Pdb/0.11.4.0": {
-      "type": "reference",
+    "dnlib/3.6.0": {
+      "type": "project",
       "serviceable": false,
       "sha512": ""
     }

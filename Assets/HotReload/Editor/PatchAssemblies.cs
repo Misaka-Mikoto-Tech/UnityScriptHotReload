@@ -35,12 +35,25 @@ namespace ScriptHotReload
         public static Dictionary<string, List<MethodBase>> methodsToHook { get; private set; } = new Dictionary<string, List<MethodBase>>();
 
         public static int patchNo { get; private set; } = 0;
+        static string _dotnetPath;
+        static string _cscPath;
 
         [InitializeOnLoadMethod]
         static void Init()
         {
             patchNo = 0;
             methodsToHook.Clear();
+
+            string dotnetName = "dotnet";
+            string cscName = "csc.dll";
+#if UNITY_EDITOR_WIN
+            dotnetName += ".exe";
+#endif
+            var unityEditorPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+            _dotnetPath = Directory.GetFiles(unityEditorPath, dotnetName, SearchOption.AllDirectories).FirstOrDefault();
+            _cscPath = Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories).FirstOrDefault();
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_dotnetPath));
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_cscPath));
         }
 
         [MenuItem("ScriptHotReload/PatchAssemblies")]
@@ -139,6 +152,8 @@ namespace ScriptHotReload
         {
             public int patchNo;
             public string workDir;
+            public string dotnetPath;
+            public string cscPath;
             public string[] assembliesToPatch;
             public string patchAssemblyNameFmt;
             public string tempScriptDir;

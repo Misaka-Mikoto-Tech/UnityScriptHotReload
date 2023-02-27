@@ -56,7 +56,14 @@ namespace ScriptHotReload
                         Debug.LogError($"can not find method `{miTarget}` in [{assName}]");
                         continue;
                     }
-                    new MethodHook(miTarget, miReplace, null, hookTag).Install();
+                    try
+                    {
+                        new MethodHook(miTarget, miReplace, null, hookTag).Install();
+                    }
+                    catch(Exception ex)
+                    {
+                        throw;
+                    }
                 }
             }
         }

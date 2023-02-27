@@ -9,9 +9,10 @@ using System.IO;
 using System.Security.Cryptography;
 using System;
 using System.Reflection;
-using Mono.Cecil;
-using Mono.Cecil.Cil;
 using System.Linq;
+using dnlib;
+using dnlib.DotNet;
+using dnlib.DotNet.Pdb;
 
 namespace AssemblyPatcher;
 
@@ -56,7 +57,7 @@ public static class Utils
             File.Delete(file);
     }
 
-    public static BindingFlags BuildBindingFlags(MethodDefinition definition)
+    public static BindingFlags BuildBindingFlags(MethodDef definition)
     {
         BindingFlags flags = BindingFlags.Default;
         if (definition.IsPublic)
@@ -95,20 +96,22 @@ public static class Utils
     /// <param name="definition"></param>
     /// <returns></returns>
     /// <remarks>TODO 优化性能</remarks>
-    public static MethodBase GetMethodInfoSlow(Type t, MethodDefinition definition)
+    public static MethodBase GetMethodInfoSlow(Type t, MethodDef definition)
     {
         var flags = BuildBindingFlags(definition);
         bool isConstructor = definition.IsConstructor;
         MethodBase[] mis = isConstructor ? (MethodBase[])t.GetConstructors(flags) : t.GetMethods(flags);
 
-        ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
+        // dnLib 会把 this 作为第一个参数
+        Parameter[] defParaArr = definition.IsStatic ? definition.Parameters.ToArray() : definition.Parameters.Skip(1).ToArray();
+
         foreach(var mi in mis)
         {
             if (!isConstructor)
             {
                 if (mi.Name != definition.Name)
                     continue;
-                if (GetCecilTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
+                if (GetDnLibTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
                     continue;
             }
             else if (mi.IsStatic != definition.IsStatic)
@@ -123,7 +126,7 @@ public static class Utils
                     var defPara = defParaArr[i];
                     var pi = piArr[i];
 
-                    if (GetCecilTypeName(pi.ParameterType) != defPara.ParameterType.FullName)
+                    if (GetDnLibTypeName(pi.ParameterType) != defPara.Type.FullName)
                     {
                         found = false;
                         break;
@@ -162,9 +165,9 @@ public static class Utils
         return null;
     }
 
-    public static bool IsLambdaStaticType(TypeReference typeReference)
+    public static bool IsLambdaStaticType(TypeDef typeDef)
     {
-        return typeReference.ToString().EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
+        return typeDef.ToString().EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
     public static bool IsLambdaStaticType(string typeSignature)
@@ -172,21 +175,20 @@ public static class Utils
         return typeSignature.EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
-    public static bool IsLambdaMethod(MethodReference methodReference)
+    public static bool IsLambdaMethod(MethodDef methodDef)
     {
-        return methodReference.Name.StartsWith("<");
+        return methodDef.Name.StartsWith("<");
     }
 
-    public static Document GetDocOfMethod(MethodDefinition definition)
+    public static PdbDocument GetDocOfMethod(MethodDef methodDef)
     {
-        var seqs = definition?.DebugInformation?.SequencePoints;
-        if (seqs.Count > 0)
-            return seqs[0].Document;
-        else
+        if (!methodDef.HasBody || !methodDef.Body.HasInstructions)
             return null;
+
+        return methodDef.Body.Instructions[0].SequencePoint?.Document; // 编译器自动生成的指令没有 SequencePoint
     }
 
-    private static string GetCecilTypeName(Type t)
+    private static string GetDnLibTypeName(Type t)
     {
         if (t.ContainsGenericParameters)
         {

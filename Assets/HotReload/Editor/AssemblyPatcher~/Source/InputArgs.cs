@@ -23,6 +23,7 @@ public class InputArgs
     public string lambdaWrapperBackend;
 
     public Dictionary<string, string> fallbackAssemblyPathes;
+    public HashSet<string> searchPaths;
 
     [NonSerialized]
     public string patchDllSuffix;

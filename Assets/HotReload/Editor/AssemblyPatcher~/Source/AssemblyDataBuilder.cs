@@ -9,59 +9,102 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System;
-using Mono.Cecil;
 using System.Linq;
 using System.Text;
-using Mono.Cecil.Cil;
 using SimpleJSON;
+using dnlib;
+using dnlib.DotNet;
+using dnlib.DotNet.Pdb;
 
 using static AssemblyPatcher.Utils;
 using System.Security.Permissions;
 using SecurityAction = System.Security.Permissions.SecurityAction;
-using OpCodes = Mono.Cecil.Cil.OpCodes;
+using dnlib.DotNet.Emit;
+using NHibernate.Mapping;
+using TypeDef = dnlib.DotNet.TypeDef;
+using dnlib.DotNet.MD;
 
 namespace AssemblyPatcher;
 
 public class AssemblyData
 {
     public string                           name;
-    public AssemblyDefinition               baseAssDef;
-    public AssemblyDefinition               newAssDef;
+    public ModuleDefMD                      baseDllDef;
+    public ModuleDefMD                      newDllDef;
     public Assembly                         assembly;
     public Dictionary<string, TypeData>     baseTypes       = new Dictionary<string, TypeData>();
     public Dictionary<string, TypeData>     newTypes        = new Dictionary<string, TypeData>();
     public Dictionary<string, TypeData>     addedTypes = new Dictionary<string, TypeData>(); // 新增类型，不包括自动生成的 lambda表达式类
     public Dictionary<string, MethodData>   allBaseMethods    = new Dictionary<string, MethodData>(); // 用于快速搜索
     public Dictionary<string, HookedMethodInfo>   methodsNeedHook  = new Dictionary<string, HookedMethodInfo>();
-    public Dictionary<Document, List<MethodData>> doc2methodsOfNew = new Dictionary<Document, List<MethodData>>(); // newTypes 中 doc 与 method的映射
+    public Dictionary<PdbDocument, List<MethodData>> doc2methodsOfNew = new Dictionary<PdbDocument, List<MethodData>>(); // newTypes 中 doc 与 method的映射
+
+    public Dictionary<string, TypeRefUser>      baseTypeRefImported = new Dictionary<string, TypeRefUser>(); // 从 baseDll 内引用的生成到 newDll 内的类型引用列表
+    public Dictionary<string, MemberRefUser>    baseMemberRefImported = new Dictionary<string, MemberRefUser>(); // 从 baseDll 内引用的生成到 newDll 内的成员引用列表
+
+    /// <summary>
+    /// 在 newAssDef 中创建的指向 baseAssDef 的Ref
+    /// </summary>
+    public AssemblyRefUser baseRefAtNewAss;
+    public ModuleRefUser baseRefAtNewDll;
+
+    public TypeRefUser GetTypeRefFromBaseType(TypeDef typeDef)
+    {
+        string fullName = typeDef.FullName;
+        if(!baseTypeRefImported.TryGetValue(fullName, out TypeRefUser refUser))
+        {
+            string @namespace = typeDef.Namespace;
+            string name = typeDef.Name;
+
+            // NestedType 的 Namespace 始终为 null, 但 scope 为 DeclaredType, 需要递归生成
+            if (typeDef.IsNested)
+            {
+                var declareRefUser = GetTypeRefFromBaseType(typeDef.DeclaringType);
+                refUser = new TypeRefUser(baseDllDef, @namespace, name, declareRefUser);
+            }
+            else
+                refUser = new TypeRefUser(baseDllDef, @namespace, name, baseRefAtNewAss);
+
+            baseTypeRefImported.Add(fullName, refUser);
+        }
+        return refUser;
+    }
+
+    public MemberRefUser GetMemberRefFromBaseMethod(MethodDef methodDef)
+    {
+        throw new NotImplementedException();
+    }
+
+    public MemberRefUser GetMemberRefFromBaseField(FieldDef fieldDef)
+    {
+        throw new NotImplementedException();
+    }
 }
 
 public class TypeData
 {
     // 不会记录 GenericInstanceType, FixMethod 时遇到会动态创建并替换
-    public TypeDefinition   definition;
-    public TypeDefinition   definitionMatched; // 如果是新的dll中的类型, 此字段为BaseDll中的同名类型，否则此字段为null
+    public TypeDef          definition;
 
     public bool             isLambdaStaticType; // 名字为 `<>` 的类型
     public TypeData         parent;
     public TypeData         childLambdaStaticType; // TypeName/<>c
 
-    public Dictionary<string, MethodData>           methods = new Dictionary<string, MethodData>();
-    public Dictionary<string, FieldDefinition>      fields = new Dictionary<string, FieldDefinition>();
+    public Dictionary<string, MethodData>    methods = new Dictionary<string, MethodData>();
+    public Dictionary<string, FieldDef>      fields = new Dictionary<string, FieldDef>();
 }
 
 public class MethodData
 {
     // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
     public TypeData         typeData;
-    public MethodDefinition definition;
-    public MethodDefinition definitionMatched; // 如果是新的dll中的方法, 此字段为BaseDll中的同名方法，否则此字段为null
+    public MethodDef        definition;
     public MethodBase       methodInfo;
     public bool             isLambda;
     public bool             ilChanged;
-    public Document         document;
+    public PdbDocument      document;
 
-    public MethodData(TypeData typeData, MethodDefinition definition, MethodInfo methodInfo, bool isLambda)
+    public MethodData(TypeData typeData, MethodDef definition, MethodInfo methodInfo, bool isLambda)
     {
         this.typeData = typeData; this.definition = definition; this.methodInfo = methodInfo; this.isLambda = isLambda;
         this.document = GetDocOfMethod(definition);
@@ -74,7 +117,7 @@ public class MethodData
         JSONObject ret = new JSONObject();
         ret["name"] = methodInfo.Name;
         ret["type"] = GetRuntimeTypeName(methodInfo.DeclaringType, methodInfo.ContainsGenericParameters);
-        ret["assembly"] = typeData.definition.Module.Name;
+        ret["assembly"] = typeData.definition.Module.Name.ToString();
         ret["isConstructor"] = methodInfo.IsConstructor;
         ret["isGeneric"] = methodInfo.ContainsGenericParameters;
         ret["isPublic"] = methodInfo.IsPublic;
@@ -96,6 +139,8 @@ public class MethodData
 
         return ret;
     }
+
+    public override string ToString() => definition.ToString();
 }
 
 public class HookedMethodInfo
@@ -127,18 +172,18 @@ public class AssemblyDataBuilder
     public bool isValid { get; private set; }
     public AssemblyData assemblyData { get; private set; } = new AssemblyData();
 
-    private AssemblyDefinition  _baseAssDef;
-    private AssemblyDefinition  _newAssDef;
+    private ModuleDefMD         _baseDllDef;
+    private ModuleDefMD         _newDllDef;
     private MethodPatcher       _methodPatcher;
     private int                 _patchNo;
 
-    public AssemblyDataBuilder(AssemblyDefinition baseAssDef, AssemblyDefinition newAssDef)
+    public AssemblyDataBuilder(ModuleDefMD baseDllDef, ModuleDefMD newDllDef)
     {
-        _baseAssDef = baseAssDef;
-        _newAssDef = newAssDef;
-        assemblyData.name = _baseAssDef.FullName;
-        assemblyData.baseAssDef = baseAssDef;
-        assemblyData.newAssDef = newAssDef;
+        _baseDllDef = baseDllDef;
+        _newDllDef = newDllDef;
+        assemblyData.name = _baseDllDef.FullName;
+        assemblyData.baseDllDef = baseDllDef;
+        assemblyData.newDllDef = newDllDef;
         _methodPatcher = new MethodPatcher(assemblyData);
     }
 
@@ -152,8 +197,8 @@ public class AssemblyDataBuilder
         assemblyData.allBaseMethods.Clear ();
         assemblyData.methodsNeedHook.Clear ();
         
-        var baseTypes = _baseAssDef.MainModule.Types;
-        var newTypes = _newAssDef.MainModule.Types; // 不包括 NestedClass
+        var baseTypes = _baseDllDef.Types;
+        var newTypes = _newDllDef.Types; // 不包括 NestedClass
 
         foreach (var t in baseTypes)
             GenTypeInfos(t, null, assemblyData.baseTypes);
@@ -207,7 +252,7 @@ public class AssemblyDataBuilder
         return isValid;
     }
 
-    public void GenTypeInfos(TypeDefinition typeDefinition, TypeData parent, Dictionary<string, TypeData> types)
+    public void GenTypeInfos(TypeDef typeDefinition, TypeData parent, Dictionary<string, TypeData> types)
     {
         TypeData typeData = new TypeData();
         typeData.definition = typeDefinition;
@@ -327,8 +372,8 @@ public class AssemblyDataBuilder
                 return false;
             }
 
-            TypeDefinition baseDef = baseType.definition;
-            TypeDefinition newDef = newType.definition;
+            var baseDef = baseType.definition;
+            var newDef = newType.definition;
             if(baseDef.IsClass != newDef.IsClass || baseDef.IsEnum != newDef.IsEnum || baseDef.IsInterface != newDef.IsInterface)
             {
                 Debug.LogError($"signature of type `{typeName}` has changed in new assembly[{assemblyData.name}]");
@@ -384,7 +429,7 @@ public class AssemblyDataBuilder
         }
 
         // il发生改变的函数所在文件的其它所有原dll中存在的函数均添加到 modified 列表，以全部使用新的pdb(它们的行号可能发生了改变，不执行hook会导致断点失效)
-        HashSet<Document> docChanged = new HashSet<Document>();
+        var docChanged = new HashSet<PdbDocument>();
         foreach(var kv in assemblyData.methodsNeedHook)
         {
             var doc = kv.Value.newMethod.document;
@@ -413,15 +458,15 @@ public class AssemblyDataBuilder
 
     void FillMethodInfoField()
     {
-        Assembly ass = (from ass_ in AppDomain.CurrentDomain.GetAssemblies() where ass_.FullName == assemblyData.name select ass_).FirstOrDefault();
+        Assembly ass = (from ass_ in AppDomain.CurrentDomain.GetAssemblies() where ass_.ManifestModule.Name == assemblyData.name select ass_).FirstOrDefault();
         Debug.Assert(ass != null);
 
-        Dictionary<TypeDefinition, Type> dicType = new Dictionary<TypeDefinition, Type>();
+        var dicType = new Dictionary<TypeDef, Type>();
         foreach (var kv in assemblyData.methodsNeedHook)
         {
             MethodData methodData = kv.Value.baseMethod;
             Type t;
-            MethodDefinition definition = methodData.definition;
+            var definition = methodData.definition;
             if (!dicType.TryGetValue(definition.DeclaringType, out t))
             {
                 t = ass.GetType(definition.DeclaringType.FullName.Replace('/', '+'));
@@ -439,30 +484,33 @@ public class AssemblyDataBuilder
     void FixNewAssembly()
     {
         // .net 不允许加载同名Assembly，因此需要改名
-        _newAssDef.Name.Name = string.Format(InputArgs.Instance.patchAssemblyNameFmt, _baseAssDef.Name.Name, _patchNo);
+        _newDllDef.Assembly.Name = string.Format(InputArgs.Instance.patchAssemblyNameFmt, Path.GetFileNameWithoutExtension(_baseDllDef.Name), _patchNo);
         {
-            var ver = _newAssDef.Name.Version;
+            var ver = _newDllDef.Assembly.Version;
             ver = new Version(ver.Major, ver.Minor, ver.Build, ver.Revision + _patchNo);
-            _newAssDef.Name.Version = ver;
+            _newDllDef.Assembly.Version = ver;
         }
 
-        _newAssDef.MainModule.Name = _newAssDef.Name.Name + ".dll";
-        _newAssDef.MainModule.Mvid = Guid.NewGuid();
+        _newDllDef.Name = _newDllDef.Assembly.Name + ".dll";
+        _newDllDef.Mvid = Guid.NewGuid();
+
+        assemblyData.baseRefAtNewAss = new AssemblyRefUser(_baseDllDef.Assembly);
+        assemblyData.baseRefAtNewDll = new ModuleRefUser(_baseDllDef);
         
-        _newAssDef.MainModule.ModuleReferences.Add(_baseAssDef.MainModule);
+        //_newAssDef.GetModuleRefs().Add(_baseAssDef.MainModule);
 
-        {// 给Assembly添加Attribute以允许IL访问外部类的私有字段
-            // IgnoresAccessChecksTo(AssemblyName)
-            {
-                var newAttr = _newAssDef.MainModule.ImportReference(typeof(IgnoresAccessChecksToAttribute).GetConstructor(new Type[] { typeof(string) }));
-                var attr = new CustomAttribute(newAttr);
-                attr.ConstructorArguments.Add(new CustomAttributeArgument(_newAssDef.MainModule.ImportReference(typeof(string)), _baseAssDef.Name.Name));
-                _newAssDef.CustomAttributes.Add(attr);
-            }
-        }
+        //{// 给Assembly添加Attribute以允许IL访问外部类的私有字段
+        //    // IgnoresAccessChecksTo(AssemblyName)
+        //    {
+        //        var newAttr = _newAssDef.ImportReference(typeof(IgnoresAccessChecksToAttribute).GetConstructor(new Type[] { typeof(string) }));
+        //        var attr = new CustomAttribute(newAttr);
+        //        attr.ConstructorArguments.Add(new CAArgument(_newAssDef.CorLibTypes.GetTypeRef("System", "string").ToTypeSig(), _baseAssDef.Name));
+        //        _newAssDef.CustomAttributes.Add(attr);
+        //    }
+        //}
 
-        Dictionary<string, MethodData> methodsToFix =
-            new Dictionary<string, MethodData> (from data in assemblyData.methodsNeedHook select KeyValuePair.Create(data.Key, data.Value.newMethod));
+        var methodsToFix =  new Dictionary<string, MethodData>
+            (from data in assemblyData.methodsNeedHook select KeyValuePair.Create(data.Key, data.Value.newMethod));
 
         /*
          * 被修改的函数所在的类型的 lambda 成员函数及 lambda static type 子类里的所有方法也一并修正，避免 lambda 表达式内的外部调用跑出范围
@@ -499,7 +547,7 @@ public class AssemblyDataBuilder
             }
         }
 
-        var processed = new Dictionary<MethodDefinition, MethodFixStatus>();
+        var processed = new Dictionary<MethodDef, MethodFixStatus>();
         foreach (var kv in methodsToFix)
         {
             _methodPatcher.PatchMethod(kv.Value.definition, processed, 0);
@@ -509,7 +557,7 @@ public class AssemblyDataBuilder
         // 已存在类的静态构造函数需要清空，防止被二次调用
         if (processed.Count > 0)
         {
-            var fixedType = new HashSet<TypeDefinition>();
+            var fixedType = new HashSet<TypeDef>();
             foreach(var kv in processed)
             {
                 var status = kv.Value;
@@ -519,7 +567,7 @@ public class AssemblyDataBuilder
 
             if(fixedType.Count > 0)
             {
-                var constructors = new List<MethodDefinition>();
+                var constructors = new List<MethodDef>();
                 var lambdaWrapperBackend = InputArgs.Instance.lambdaWrapperBackend;
                 foreach (var tdef in fixedType)
                 {
@@ -562,27 +610,27 @@ public class AssemblyDataBuilder
     /// </summary>
     /// <param name="constructors"></param>
     /// <remarks>新增类的静态构造函数由于是第一次执行，因此不能清空函数体，只能修正</remarks>
-    void RemoveStaticConstructorsBody(List<MethodDefinition> constructors)
+    void RemoveStaticConstructorsBody(List<MethodDef> constructors)
     {
         foreach(var ctor in constructors)
         {
             if (ctor.Name != ".cctor" || !ctor.HasBody)
                 continue;
 
-            var il = ctor.Body.GetILProcessor();
-            il.Clear();
-            il.Append(Instruction.Create(OpCodes.Ret));
+            var ins = ctor.Body.Instructions;
+            ins.Clear();
+            ins.Add(OpCodes.Ret.ToInstruction());
         }
     }
 }
 
-class TypeDefComparer<T> : IComparer<T> where T : MemberReference
-{
-    public static TypeDefComparer<T> comparer = new TypeDefComparer<T>();
+//class TypeDefComparer<T> : IComparer<T> where T : MemberRef
+//{
+//    public static TypeDefComparer<T> comparer = new TypeDefComparer<T>();
 
-    public int Compare(T x, T y)
-    {
-        return x.FullName.CompareTo(y.FullName);
-    }
-}
+//    public int Compare(T x, T y)
+//    {
+//        return x.FullName.CompareTo(y.FullName);
+//    }
+//}
 

@@ -1,4 +1,4 @@
-﻿//#define APPLY_PATCH
+﻿#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -9,6 +9,13 @@ using UnityEngine;
 
 namespace NS_Test
 {
+
+    public struct TestStruct
+    {
+        public int x;
+        public bool y;
+    }
+
 #if APPLY_PATCH
     public class NewTestClass
     {
@@ -86,7 +93,7 @@ namespace NS_Test
             val = 2;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
             Debug.Log($"x is OK:{f(val + 2)}");
-            TestB();
+            TestGeneric();
             TestC();
             Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
@@ -121,7 +128,7 @@ namespace NS_Test
             val = 2000;
             Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
             Debug.Log($"x is OK:{f(val + 2)}");
-            TestB();
+            TestGeneric();
             TestC();
             Debug.Log($"Test4.val={Test4.val} from Test()");
             str = "be happy";
@@ -168,16 +175,36 @@ namespace NS_Test
         }
 #endif
 
-        public void TestB()
+        public void TestGeneric()
         {
-            Type t = typeof(int);
-            Debug.Log(t.Name);
+            // 测试各种当前Assembly和其它Assembly内定义的非泛型和泛型类型
+            {
+                Debug.Log(typeof(int).Name);
+                Debug.Log(typeof(Action<int>).Name);
+                Debug.Log(typeof(Action<TestClsG<bool>>).Name);
+                Debug.Log(typeof(Action<TestClsG<bool>[]>[]).Name);
 
-            t = typeof(TestCls);
-            Debug.Log(t.Name);
+                Debug.Log(typeof(TestCls).Name);
+                Debug.Log(typeof(TestClsG<>).Name);
+                Debug.Log(typeof(TestClsG<>.TestClsGInner<>).Name);
+                Debug.Log(typeof(TestClsG<>.TestClsGInner<>).Name);
+                Debug.Log(typeof(TestClsG<TestClsG<TestStruct>[]>.TestClsGInner<string[]>[]).Name);
+                Debug.Log(typeof(Action<TestClsG<TestClsG<TestCls>[]>.TestClsGInner<string[]>[]>[]).Name);
 
-            Type tG = typeof(TestClsG<TestCls>.TestClsGInner<string>);
-            Debug.Log(tG.Name);
+                int x = 2;
+                ref int y = ref x;
+                Action<TestClsG<TestCls>.TestClsGInner<string[]>[]>[] x2 = null;
+                ref Action<TestClsG<TestCls>.TestClsGInner<string[]>[]>[] y2 = ref x2;
+
+                int * px3 = null;
+                ref int * py3 = ref px3;
+
+                TestStruct ts = new TestStruct();
+                ref TestStruct ts2 = ref ts;
+
+                TestStruct* pts = null;
+                ref TestStruct* pts2 = ref pts; ;
+            }
 
             _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             _genericFiledTest.innerField_i = 257;
@@ -201,7 +228,7 @@ namespace NS_Test
         public void TestC()
         {
             PrintMethodLocation(MethodBase.GetCurrentMethod());
-            TestB();
+            TestGeneric();
         }
 
         public T TestG<T>(T t) where T:new()
@@ -234,6 +261,8 @@ namespace NS_Test
 
             public int ShowInner(int x)
             {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.AddComponent<MonoTestA>();
                 var val1 = ShowGInner<long>(default(T), default(V), 2345);
                 var val2 = FuncG(default(T), "abc", default(V));
 #if !APPLY_PATCH
@@ -245,6 +274,9 @@ namespace NS_Test
 
             public V ShowGInner<UK>(T arg0, V arg1, UK arg2)
             {
+                Debug.Log(typeof(Func<int, bool>));
+                Debug.Log(typeof(Func<int, V>));
+                Debug.Log(typeof(Func<UK, V>));
                 Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(UK).GetType()}");
                 return arg1;
             }

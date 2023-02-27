@@ -6,8 +6,9 @@ using System.Reflection;
 using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
-using Mono.Cecil;
 using SimpleJSON;
+using dnlib;
+using dnlib.DotNet;
 using static AssemblyPatcher.Utils;
 
 namespace AssemblyPatcher;
@@ -18,6 +19,8 @@ public class Patcher
     string _outputFilePath;
     InputArgs _inputArgs;
     Dictionary<string, List<MethodData>> _methodsNeedHook = new Dictionary<string, List<MethodData>>();
+
+    ModuleContext _ctxBase, _ctxNew;
 
     public Patcher(string inputFilePath, string outputFilePath)
     {
@@ -43,19 +46,36 @@ public class Patcher
         }
         sw.Stop();
         Console.WriteLine($"[Debug]载入相关dll耗时 {sw.ElapsedMilliseconds} ms");
+
+        CreateCtx();
+    }
+
+    void CreateCtx()
+    {
+        {
+            var baseResolver = new dnlib.DotNet.AssemblyResolver();
+            _ctxBase = new ModuleContext(baseResolver, null);
+            baseResolver.DefaultModuleContext = _ctxBase;
+
+            foreach (var ass in _inputArgs.searchPaths)
+                baseResolver.PostSearchPaths.Add(ass);
+            baseResolver.PostSearchPaths.Add(_inputArgs.builtinAssembliesDir);
+        }
+
+        {
+            var newResolver = new dnlib.DotNet.AssemblyResolver();
+            _ctxNew = new ModuleContext(newResolver, null);
+            newResolver.DefaultModuleContext = _ctxNew;
+
+            foreach (var ass in _inputArgs.searchPaths)
+                newResolver.PostSearchPaths.Add(ass);
+            newResolver.PostSearchPaths.Add(_inputArgs.tempCompileToDir);
+        }
     }
 
     public bool DoPatch()
     {
         //File.Delete(_outputFilePath);
-
-        var baseReadParam = new ReaderParameters(ReadingMode.Deferred)
-        { ReadSymbols = true, AssemblyResolver = new AssemblyResolver(_inputArgs.builtinAssembliesDir, _inputArgs.fallbackAssemblyPathes) };
-
-        var newReadParam = new ReaderParameters(ReadingMode.Deferred)
-        { ReadSymbols = true, AssemblyResolver = new AssemblyResolver(_inputArgs.tempCompileToDir, _inputArgs.fallbackAssemblyPathes) };
-
-        var writeParam = new WriterParameters() { WriteSymbols = true };
 
         foreach (string assName in _inputArgs.assembliesToPatch)
         {
@@ -74,9 +94,9 @@ public class Patcher
             if (IsFilesEqual(newDll, lastDll))
                 continue;
 
-            using (var baseAssDef = AssemblyDefinition.ReadAssembly(baseDll, baseReadParam))
+            using (var baseAssDef = ModuleDefMD.Load(baseDll, _ctxBase))
             {
-                using (var newAssDef = AssemblyDefinition.ReadAssembly(newDll, newReadParam))
+                using (var newAssDef = ModuleDefMD.Load(newDll, _ctxNew))
                 {
                     var assBuilder = new AssemblyDataBuilder(baseAssDef, newAssDef);
                     if (!assBuilder.DoBuild(_inputArgs.patchNo))
@@ -86,7 +106,7 @@ public class Patcher
                     }
 
                     string patchDll = string.Format(_inputArgs.patchDllPathFmt, assNameNoExt, _inputArgs.patchNo);
-                    newAssDef.Write(patchDll, writeParam);
+                    newAssDef.Write(patchDll);
 
                     // 有可能数量为0，此时虽然与原始dll无差异，但是与上一次编译有差异，也需要处理（清除已hook函数）
                     _methodsNeedHook.Add(assName, (from data in assBuilder.assemblyData.methodsNeedHook.Values select data.baseMethod).ToList());
@@ -118,9 +138,14 @@ public class Patcher
 
         string[] fallbackAsses = root["fallbackAssemblyPathes"];
         args.fallbackAssemblyPathes = new Dictionary<string, string>();
+        args.searchPaths = new HashSet<string>();
         foreach(string ass in fallbackAsses)
         {
-            args.fallbackAssemblyPathes.TryAdd(Path.GetFileNameWithoutExtension(ass), ass);
+            var ass2 = ass.Replace('\\', '/');
+            args.fallbackAssemblyPathes.TryAdd(Path.GetFileNameWithoutExtension(ass2), ass2);
+
+            if(!ass2.Contains("Library/ScriptAssemblies"))
+                args.searchPaths.Add(Path.GetDirectoryName(ass2));
         }
 
         InputArgs.Instance = args;
