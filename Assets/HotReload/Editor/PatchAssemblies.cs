@@ -52,6 +52,7 @@ namespace ScriptHotReload
             var unityEditorPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
             _dotnetPath = Directory.GetFiles(unityEditorPath, dotnetName, SearchOption.AllDirectories).FirstOrDefault();
             _cscPath = Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories).FirstOrDefault();
+
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_dotnetPath));
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_cscPath));
         }
@@ -171,6 +172,8 @@ namespace ScriptHotReload
             var inputArgs = new InputArgs();
             inputArgs.patchNo = patchNo;
             inputArgs.workDir = Environment.CurrentDirectory;
+            inputArgs.dotnetPath = _dotnetPath;
+            inputArgs.cscPath = _cscPath;
             inputArgs.assembliesToPatch = hotReloadAssemblies.ToArray();
             inputArgs.patchAssemblyNameFmt = kPatchAssemblyName;
             inputArgs.tempScriptDir = kTempScriptDir;
