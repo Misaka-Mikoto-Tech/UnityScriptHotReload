@@ -11,20 +11,17 @@ namespace ScriptHotReload
     public class HotReloadConfig
     {
         /// <summary>
-        /// 需要执行 HotReload 的程序集名称
+        /// 是否启用，运行时修改无效
         /// </summary>
-        public static List<string> hotReloadAssemblies = new List<string>()
-        {
-            "Assembly-CSharp.dll",
-            "TestDllA.dll"
-        };
-
-        public const string kPatchAssemblyName      = "{0}_patch_{1}";  // {0}:assNameNoExt, {1}:PatchNo
+        public readonly static bool hotReloadEnabled = true;
+        /// <summary>
+        /// 文件变化检测间隔
+        /// </summary>
+        public const float  kFileChangeCheckSpan    = 2.5f;
+        public const string kPatchAssemblyName      = "__patch_{0}";  // {0}:PatchNo
 
         public const string kTempScriptDir          = "Temp/ScriptHotReload";
-        public const string kTempCompileToDir       = "Temp/ScriptHotReload/tmp";
         public const string kBuiltinAssembliesDir   = "Library/ScriptAssemblies";
-        public const string kLastDllPathFormat      = kTempScriptDir + "/{0}__last.dll"; // {0}:assNameNoExt
         public const string kPatchDllPathFormat     = kTempScriptDir + "/"+ kPatchAssemblyName +".dll";
 
         public const string kAssemblyPatcherInput = kTempScriptDir + "/InputArgs.json";

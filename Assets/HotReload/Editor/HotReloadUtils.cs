@@ -108,19 +108,24 @@ namespace ScriptHotReload
                 return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>').Replace("<>", "[]"); // 最后一步是还原数组的[]
         }
 
-        public static Dictionary<string, string> GetFallbackAssemblyPaths()
+        private static string[] _fallbackAssemblyPaths; // 第一次Patch前调用后就固定下来，因此不会被新载入的PatchAssembly影响
+        public static string[] GetFallbackAssemblyPaths()
         {
+            if (_fallbackAssemblyPaths != null)
+                return _fallbackAssemblyPaths;
+
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            var ret = new Dictionary<string, string>();
+            var lst = new List<string>();
             foreach(var ass in assemblies)
             {
                 if (ass.IsDynamic)
                     continue;
 
                 if(!string.IsNullOrEmpty(ass.Location))
-                    ret.TryAdd(Path.GetFileNameWithoutExtension(ass.Location), ass.Location);
+                    lst.Add(ass.Location);
             }
-            return ret;
+            _fallbackAssemblyPaths = lst.ToArray();
+            return _fallbackAssemblyPaths;
         }
 
         public static string GetThisFilePath([CallerFilePath] string path = null)

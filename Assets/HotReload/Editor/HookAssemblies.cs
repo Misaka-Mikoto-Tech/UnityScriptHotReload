@@ -36,7 +36,7 @@ namespace ScriptHotReload
                 var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
                 HookPool.UninstallByTag(hookTag);
 
-                string patchAssPath = string.Format(kPatchDllPathFormat, Path.GetFileNameWithoutExtension(assName), GenPatchAssemblies.patchNo);
+                string patchAssPath = string.Format(kPatchDllPathFormat, HotReloadExecutor.patchNo);
                 Assembly patchAssembly = Assembly.LoadFrom(patchAssPath);
                 if(patchAssembly == null)
                 {
@@ -62,6 +62,7 @@ namespace ScriptHotReload
                     }
                     catch(Exception ex)
                     {
+                        Debug.Log(ex.Message);
                         throw;
                     }
                 }
