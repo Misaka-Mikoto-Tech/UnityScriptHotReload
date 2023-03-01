@@ -122,7 +122,7 @@ namespace ScriptHotReload
                     continue;
 
                 if(!string.IsNullOrEmpty(ass.Location))
-                    lst.Add(ass.Location);
+                    lst.Add(ass.Location.Replace('\\', '/'));
             }
             _fallbackAssemblyPaths = lst.ToArray();
             return _fallbackAssemblyPaths;

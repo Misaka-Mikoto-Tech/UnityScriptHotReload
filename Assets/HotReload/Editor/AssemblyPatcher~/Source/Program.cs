@@ -33,8 +33,16 @@ internal class Program
         bool success = false;
         try
         {
-            var patcher = new Patcher(args[0], args[1]);
-            success = patcher.DoPatch();
+            do
+            {
+                InputArgs.LoadFromFile(args[0]);
+                Environment.CurrentDirectory = InputArgs.Instance.workDir;
+                if (new SourceCompiler().DoCompile() != 0)
+                    break;
+                //if (!new Patcher(args[1]).DoPatch())
+                //    break;
+                success = true;
+            } while (false);
         }
         catch(Exception ex)
         {

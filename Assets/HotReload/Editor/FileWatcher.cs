@@ -22,22 +22,34 @@ namespace ScriptHotReload
             public DateTime lastModify;
         }
 
-        public static bool hasChangedSinceLast { get; private set; } = false;
-        public static DateTime lastModifyTime { get; private set; } = DateTime.MinValue;
-        public static Dictionary<string, FileEntry> filesChanged { get; private set; } = new Dictionary<string, FileEntry>();
-
         /// <summary>
         /// 需要监视的目录列表，可自行修改
         /// </summary>
-        public static List<string> dirsToWatch= new List<string>() { "Assets" };
+        public static List<string> dirsToWatch = new List<string>() { "Assets" };
 
+        public static bool changedSinceLastGet { get; private set; } = false;
+        public static DateTime lastModifyTime { get; private set; } = DateTime.MinValue;
+
+        static Dictionary<string, FileEntry> _filesChanged = new Dictionary<string, FileEntry>();
         static Dictionary<string, FileSystemWatcher> _fileSystemWatchers = new Dictionary<string, FileSystemWatcher>();
-        
+        static bool _isWatching = false;
+        static object _locker = new object();
 
         static FileWatcher()
         {
             if(hotReloadEnabled)
                 EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        public static string[] GetChangedFile()
+        {
+            var ret = new List<string>();
+            lock(_locker)
+            {
+                ret.AddRange(_filesChanged.Keys);
+                changedSinceLastGet = false;
+            }
+            return ret.ToArray();
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange mode)
@@ -83,12 +95,14 @@ namespace ScriptHotReload
                 watcher.NotifyFilter = NotifyFilters.LastWrite;
                 watcher.EnableRaisingEvents = true;
                 watcher.Changed += OnFileChanged;
+                _fileSystemWatchers.Add(dir, watcher);
             }
-            
+            _isWatching= true;
         }
 
         private static void StopWatch()
         {
+            _isWatching= false;
             foreach (var watcher in _fileSystemWatchers)
             {
                 watcher.Value.Dispose();
@@ -98,19 +112,26 @@ namespace ScriptHotReload
 
         private static void OnFileChanged(object source, FileSystemEventArgs e)
         {
-            var fullPath = e.FullPath;
+            if (!_isWatching) return; // 此回调函数不在主线程执行，因此不能使用 Application.isPlaying 判断
 
-            if (!Application.isPlaying) return;
+            var fullPath = e.FullPath.Replace('\\', '/');
+            if (fullPath.Contains("/HotReload/Editor/")) return; // 插件自身路径，不reload
+
             if(!File.Exists(fullPath)) return;
 
-            if(!filesChanged.TryGetValue(fullPath, out FileEntry entry))
+            var now = DateTime.Now;
+            lock(_locker)
             {
-                entry = new FileEntry() { path = fullPath, version = 0, lastModify = DateTime.Now };
-                filesChanged.Add(fullPath, entry);
+                if (!_filesChanged.TryGetValue(fullPath, out FileEntry entry))
+                {
+                    entry = new FileEntry() { path = fullPath, version = 0, lastModify = now };
+                    _filesChanged.Add(fullPath, entry);
+                }
+                entry.version++;
+                entry.lastModify = now;
+                changedSinceLastGet = true;
+                lastModifyTime = now;
             }
-            entry.version++;
-            entry.lastModify= DateTime.Now;
-            hasChangedSinceLast = true;
         }
     }
 }

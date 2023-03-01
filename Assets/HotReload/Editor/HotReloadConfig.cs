@@ -5,6 +5,7 @@
  */
 
 using System.Collections.Generic;
+using System.IO;
 
 namespace ScriptHotReload
 {
@@ -34,6 +35,14 @@ namespace ScriptHotReload
         /// </summary>
         /// <remarks>注意：只修改lambda表达式，但不修改调用处代码，将不会被检测到改变</remarks>
         public const string kLambdaWrapperBackend = "/<>c";
+
+        static HotReloadConfig()
+        {
+            if(!Directory.Exists(kTempScriptDir))
+            {
+                Directory.CreateDirectory(kTempScriptDir);
+            }
+        }
 
     }
 

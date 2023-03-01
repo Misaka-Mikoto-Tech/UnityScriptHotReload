@@ -484,7 +484,7 @@ public class AssemblyDataBuilder
     void FixNewAssembly()
     {
         // .net 不允许加载同名Assembly，因此需要改名
-        _newDllDef.Assembly.Name = string.Format(InputArgs.Instance.patchAssemblyNameFmt, Path.GetFileNameWithoutExtension(_baseDllDef.Name), _patchNo);
+        _newDllDef.Assembly.Name = string.Format(InputArgs.Instance.patchDllPath, Path.GetFileNameWithoutExtension(_baseDllDef.Name), _patchNo);
         {
             var ver = _newDllDef.Assembly.Version;
             ver = new Version(ver.Major, ver.Minor, ver.Build, ver.Revision + _patchNo);

@@ -1,4 +1,4 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -12,6 +12,7 @@ using System.Reflection;
 
 using static ScriptHotReload.HotReloadUtils;
 using static ScriptHotReload.HotReloadConfig;
+using System.Text;
 
 namespace ScriptHotReload
 {
@@ -36,8 +37,8 @@ namespace ScriptHotReload
             dotnetName += ".exe";
 #endif
             var unityEditorPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
-            _dotnetPath = Directory.GetFiles(unityEditorPath, dotnetName, SearchOption.AllDirectories).FirstOrDefault();
-            _cscPath = Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories).FirstOrDefault();
+            _dotnetPath = Directory.GetFiles(unityEditorPath, dotnetName, SearchOption.AllDirectories).FirstOrDefault().Replace('\\', '/');
+            _cscPath = Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories).FirstOrDefault().Replace('\\', '/');
 
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_dotnetPath));
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_cscPath));
@@ -59,13 +60,14 @@ namespace ScriptHotReload
                         if (_methodsToHook.Count > 0)
                             patchNo++;
 
-                        UnityEngine.Debug.Log("<color=yellow>ÈÈÖØÔØÍê³É</color>");
+                        UnityEngine.Debug.Log("<color=yellow>çƒ­é‡è½½å®Œæˆ</color>");
                     }
                     _patchTask = null;
                 }
+                return;
             }
 
-            if (!FileWatcher.hasChangedSinceLast
+            if (!FileWatcher.changedSinceLastGet
                 || new TimeSpan(DateTime.Now.Ticks - FileWatcher.lastModifyTime.Ticks).TotalSeconds < kFileChangeCheckSpan)
                 return;
 
@@ -80,11 +82,13 @@ namespace ScriptHotReload
             public string workDir;
             public string dotnetPath;
             public string cscPath;
-            public string[] filesChanged;
+            
             public string tempScriptDir;
             public string builtinAssembliesDir;
-            public string patchDllPathFmt;
+            public string patchDllPath;
             public string lambdaWrapperBackend;
+
+            public string[] filesChanged;
 
             public string[] defines;
             public string[] fallbackAssemblyPathes;
@@ -93,19 +97,22 @@ namespace ScriptHotReload
         {
             var inputArgs = new InputArgs();
             inputArgs.patchNo = patchNo;
-            inputArgs.workDir = Environment.CurrentDirectory;
+            inputArgs.workDir = Environment.CurrentDirectory.Replace('\\', '/');
             inputArgs.dotnetPath = _dotnetPath;
             inputArgs.cscPath = _cscPath;
-            inputArgs.filesChanged = FileWatcher.filesChanged.Keys.ToArray();
-            inputArgs.tempScriptDir = kTempScriptDir;
-            inputArgs.builtinAssembliesDir = kBuiltinAssembliesDir;
-            inputArgs.patchDllPathFmt = kPatchDllPathFormat;
+            
+            inputArgs.tempScriptDir = $"{inputArgs.workDir}/{kTempScriptDir}";
+            inputArgs.builtinAssembliesDir = $"{inputArgs.workDir}/{kBuiltinAssembliesDir}";
+            inputArgs.patchDllPath = $"{inputArgs.workDir}/{string.Format(kPatchDllPathFormat, patchNo)}";
             inputArgs.lambdaWrapperBackend = kLambdaWrapperBackend;
+
+            inputArgs.filesChanged = FileWatcher.GetChangedFile();
+
             inputArgs.defines = EditorUserBuildSettings.activeScriptCompilationDefines;
             inputArgs.fallbackAssemblyPathes = GetFallbackAssemblyPaths();
 
             string jsonStr = JsonUtility.ToJson(inputArgs, true);
-            File.WriteAllText(kAssemblyPatcherInput, jsonStr);
+            File.WriteAllText(kAssemblyPatcherInput, jsonStr, Encoding.UTF8);
         }
 
         private static int RunAssemblyPatchProcess()
@@ -143,7 +150,7 @@ namespace ScriptHotReload
             using (var sr = procPathcer.StandardError) { outputProcMsgs(sr); }
 
             int exitCode = -1;
-            if (procPathcer.WaitForExit(60 * 1000)) // ×î³¤µÈ´ı1·ÖÖÓ
+            if (procPathcer.WaitForExit(60 * 1000)) // æœ€é•¿ç­‰å¾…1åˆ†é’Ÿ
                 exitCode = procPathcer.ExitCode;
             else
                 procPathcer.Kill();
