@@ -19,7 +19,7 @@ namespace ScriptHotReload
         /// 文件变化检测间隔
         /// </summary>
         public const float  kFileChangeCheckSpan    = 2.5f;
-        public const string kPatchAssemblyName      = "__patch_{0}";  // {0}:PatchNo
+        public const string kPatchAssemblyName      = "__Patch_{0}";  // {0}:PatchNo
 
         public const string kTempScriptDir          = "Temp/ScriptHotReload";
         public const string kBuiltinAssembliesDir   = "Library/ScriptAssemblies";

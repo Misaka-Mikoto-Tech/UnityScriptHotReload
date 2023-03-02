@@ -26,6 +26,7 @@ public class InputArgs
 
     public string[] defines;
     public Dictionary<string, string> fallbackAssemblyPathes;
+    public Dictionary<string, string> userAssemblyPathes; // 非系统和Unity相关的用户自己的dll
     public HashSet<string> searchPaths;
 
     [NonSerialized]
@@ -48,13 +49,24 @@ public class InputArgs
         args.defines = root["defines"];
         string[] fallbackAsses = root["fallbackAssemblyPathes"];
         args.fallbackAssemblyPathes = new Dictionary<string, string>();
+        args.userAssemblyPathes = new Dictionary<string, string>();
         args.searchPaths = new HashSet<string>();
+
         foreach (string ass in fallbackAsses)
         {
-            args.fallbackAssemblyPathes.TryAdd(Path.GetFileNameWithoutExtension(ass), ass);
+            string fileNameNoExt = Path.GetFileNameWithoutExtension(ass);
+            args.fallbackAssemblyPathes.TryAdd(fileNameNoExt, ass);
 
             if (!ass.Contains("Library/ScriptAssemblies"))
                 args.searchPaths.Add(Path.GetDirectoryName(ass));
+
+            // 默认认为用户不会修改unity官方代码, 可根据自己需求自行调整
+            if(ass.StartsWith(args.workDir) && !ass.Contains("/com.unity."))
+            {
+                if (!fileNameNoExt.StartsWith("Unity")
+                    && !fileNameNoExt.StartsWith("System."))
+                        args.userAssemblyPathes.Add(fileNameNoExt, ass);
+            }
         }
 
         Instance = args;

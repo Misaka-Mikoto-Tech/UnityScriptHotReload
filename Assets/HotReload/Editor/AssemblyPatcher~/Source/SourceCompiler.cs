@@ -18,8 +18,8 @@ public class SourceCompiler
     private string _assAttrPath;
     public int DoCompile()
     {
-        _rspPath = InputArgs.Instance.tempScriptDir + "/hotreload.rsp";
-        _assAttrPath = InputArgs.Instance.tempScriptDir + "/hotreload_attr.cs";
+        _rspPath = InputArgs.Instance.tempScriptDir + "/__Patch__.rsp";
+        _assAttrPath = InputArgs.Instance.tempScriptDir + "/__Patch__Attr.cs";
 
         GenAssemblyAttributesFile();
         GenRspFile();
@@ -41,11 +41,8 @@ public class SourceCompiler
         sb.AppendLine("[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]");
 #if FOR_NET6_0_OR_GREATER
         // for .netcore or newer
-        foreach (var @ref in InputArgs.Instance.fallbackAssemblyPathes.Keys)
-            if((@ref != "mscorlib")
-                && !@ref.StartsWith("Unity")
-                && !@ref.StartsWith("System"))
-                        sb.AppendLine($"[assembly: IgnoresAccessChecksTo(\"{@ref}\")]");
+        foreach (var @ref in InputArgs.Instance.userAssemblyPathes.Keys)
+            sb.AppendLine($"[assembly: IgnoresAccessChecksTo(\"{@ref}\")]");
 #endif
 
         File.WriteAllText(_assAttrPath, sb.ToString(), Encoding.UTF8);

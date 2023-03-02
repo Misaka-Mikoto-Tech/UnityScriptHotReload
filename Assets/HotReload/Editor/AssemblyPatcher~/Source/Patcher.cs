@@ -21,10 +21,12 @@ public class Patcher
 
     ModuleContext _ctxBase, _ctxNew;
 
+    Dictionary<string, TypeData> allPatchTypes = new Dictionary<string, TypeData>(); // patch dll 内所有的dll
+    Dictionary<string, TypeData> allOriginalTypes = new Dictionary<string, TypeData>(); // 原始用户代码生成的dll内的类型数据
+
     public Patcher(string outputFilePath)
     {
         _outputFilePath = outputFilePath;
-        ParseInputJsonStr();
         _inputArgs = InputArgs.Instance;
         Environment.CurrentDirectory = _inputArgs.workDir;
 
@@ -46,6 +48,7 @@ public class Patcher
         Console.WriteLine($"[Debug]载入相关dll耗时 {sw.ElapsedMilliseconds} ms");
 
         CreateCtx();
+        LoadAllTypes();
     }
 
     void CreateCtx()
@@ -69,6 +72,11 @@ public class Patcher
                 newResolver.PostSearchPaths.Add(ass);
             //newResolver.PostSearchPaths.Add(_inputArgs.tempCompileToDir);
         }
+    }
+
+    private void LoadAllTypes()
+    {
+
     }
 
     public bool DoPatch()
@@ -117,35 +125,6 @@ public class Patcher
         GenOutputJsonFile();
 
         return true;
-    }
-
-    private void ParseInputJsonStr()
-    {
-        //JSONNode root = JSON.Parse(File.ReadAllText(_inputFilePath));
-        //InputArgs args = new InputArgs();
-        //args.patchNo = root["patchNo"];
-        //args.workDir = root["workDir"];
-        //args.dotnetPath = root["dotnetPath"];
-        //args.cscPath = root["cscPath"];
-        //args.filesChanged = root["filesChanged"];
-        //args.tempScriptDir = root["tempScriptDir"];
-        //args.builtinAssembliesDir = root["builtinAssembliesDir"];
-        //args.patchDllPath = root["patchDllPathFmt"];
-        //args.lambdaWrapperBackend = root["lambdaWrapperBackend"];
-
-        //args.defines = root["defines"];
-        //string[] fallbackAsses = root["fallbackAssemblyPathes"];
-        //args.fallbackAssemblyPathes = new Dictionary<string, string>();
-        //args.searchPaths = new HashSet<string>();
-        //foreach(string ass in fallbackAsses)
-        //{
-        //    args.fallbackAssemblyPathes.TryAdd(Path.GetFileNameWithoutExtension(ass), ass);
-
-        //    if(!ass.Contains("Library/ScriptAssemblies"))
-        //        args.searchPaths.Add(Path.GetDirectoryName(ass));
-        //}
-
-        //InputArgs.Instance = args;
     }
 
     private void GenOutputJsonFile()
