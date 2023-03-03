@@ -108,11 +108,11 @@ namespace ScriptHotReload
                 return t.ToString().Replace('+', '/').Replace('[', '<').Replace(']', '>').Replace("<>", "[]"); // 最后一步是还原数组的[]
         }
 
-        private static string[] _fallbackAssemblyPaths; // 第一次Patch前调用后就固定下来，因此不会被新载入的PatchAssembly影响
-        public static string[] GetFallbackAssemblyPaths()
+        private static string[] _allAssemblyPaths; // 第一次Patch前调用后就固定下来，因此不会被新载入的PatchAssembly影响
+        public static string[] GetAllAssemblyPaths()
         {
-            if (_fallbackAssemblyPaths != null)
-                return _fallbackAssemblyPaths;
+            if (_allAssemblyPaths != null)
+                return _allAssemblyPaths;
 
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             var lst = new List<string>();
@@ -124,8 +124,8 @@ namespace ScriptHotReload
                 if(!string.IsNullOrEmpty(ass.Location))
                     lst.Add(ass.Location.Replace('\\', '/'));
             }
-            _fallbackAssemblyPaths = lst.ToArray();
-            return _fallbackAssemblyPaths;
+            _allAssemblyPaths = lst.ToArray();
+            return _allAssemblyPaths;
         }
 
         public static string GetThisFilePath([CallerFilePath] string path = null)

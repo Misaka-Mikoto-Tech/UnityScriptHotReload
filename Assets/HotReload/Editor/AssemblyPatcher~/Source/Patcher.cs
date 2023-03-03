@@ -16,72 +16,24 @@ namespace AssemblyPatcher;
 public class Patcher
 {
     string _outputFilePath;
-    InputArgs _inputArgs;
+    GlobalConfig _inputArgs;
     Dictionary<string, List<MethodData>> _methodsNeedHook = new Dictionary<string, List<MethodData>>();
 
-    ModuleContext _ctxBase, _ctxNew;
-
-    Dictionary<string, TypeData> allPatchTypes = new Dictionary<string, TypeData>(); // patch dll 内所有的dll
-    Dictionary<string, TypeData> allOriginalTypes = new Dictionary<string, TypeData>(); // 原始用户代码生成的dll内的类型数据
-
-    public Patcher(string outputFilePath)
+    public Patcher(string moduleName, string outputFilePath)
     {
         _outputFilePath = outputFilePath;
-        _inputArgs = InputArgs.Instance;
+        _inputArgs = GlobalConfig.Instance;
         Environment.CurrentDirectory = _inputArgs.workDir;
-
-        // 提前把相关dll都载入，方便查找对应类型
-        Stopwatch sw = new Stopwatch();
-        sw.Start();
-        foreach (var kv in _inputArgs.fallbackAssemblyPathes)
-        {
-            try
-            {
-                Assembly.LoadFrom(kv.Value);
-            }
-            catch(Exception ex)
-            {
-                Debug.LogError($"load dll fail:{kv.Value}\r\n:{ex.Message}\r\n{ex.StackTrace}");
-            }
-        }
-        sw.Stop();
-        Console.WriteLine($"[Debug]载入相关dll耗时 {sw.ElapsedMilliseconds} ms");
-
-        CreateCtx();
-        LoadAllTypes();
-    }
-
-    void CreateCtx()
-    {
-        {
-            var baseResolver = new dnlib.DotNet.AssemblyResolver();
-            _ctxBase = new ModuleContext(baseResolver, null);
-            baseResolver.DefaultModuleContext = _ctxBase;
-
-            foreach (var ass in _inputArgs.searchPaths)
-                baseResolver.PostSearchPaths.Add(ass);
-            baseResolver.PostSearchPaths.Add(_inputArgs.builtinAssembliesDir);
-        }
-
-        {
-            var newResolver = new dnlib.DotNet.AssemblyResolver();
-            _ctxNew = new ModuleContext(newResolver, null);
-            newResolver.DefaultModuleContext = _ctxNew;
-
-            foreach (var ass in _inputArgs.searchPaths)
-                newResolver.PostSearchPaths.Add(ass);
-            //newResolver.PostSearchPaths.Add(_inputArgs.tempCompileToDir);
-        }
-    }
-
-    private void LoadAllTypes()
-    {
-
     }
 
     public bool DoPatch()
     {
         //File.Delete(_outputFilePath);
+
+        foreach(var kv in GlobalConfig.Instance.filesToCompile)
+        {
+
+        }
 
         //foreach (string assName in _inputArgs.assembliesToPatch)
         //{
@@ -140,7 +92,7 @@ public class Patcher
          */
 
         JSONObject root = new JSONObject();
-        root.Add("patchNo", InputArgs.Instance.patchNo);
+        root.Add("patchNo", GlobalConfig.Instance.patchNo);
         JSONArray assChanged = new JSONArray();
         root.Add("assemblyChangedFromLast", assChanged);
         JSONArray arrMethodsNeedHook = new JSONArray();

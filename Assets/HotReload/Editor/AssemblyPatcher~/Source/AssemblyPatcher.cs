@@ -81,68 +81,6 @@ public class AssemblyData
     }
 }
 
-public class TypeData
-{
-    // 不会记录 GenericInstanceType, FixMethod 时遇到会动态创建并替换
-    public TypeDef          definition;
-
-    public bool             isLambdaStaticType; // 名字为 `<>` 的类型
-    public TypeData         parent;
-    public TypeData         childLambdaStaticType; // TypeName/<>c
-
-    public Dictionary<string, MethodData>    methods = new Dictionary<string, MethodData>();
-    public Dictionary<string, FieldDef>      fields = new Dictionary<string, FieldDef>();
-}
-
-public class MethodData
-{
-    // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
-    public TypeData         typeData;
-    public MethodDef        definition;
-    public MethodBase       methodInfo;
-    public bool             isLambda;
-    public bool             ilChanged;
-    public PdbDocument      document;
-
-    public MethodData(TypeData typeData, MethodDef definition, MethodInfo methodInfo, bool isLambda)
-    {
-        this.typeData = typeData; this.definition = definition; this.methodInfo = methodInfo; this.isLambda = isLambda;
-        this.document = GetDocOfMethod(definition);
-    }
-
-    public JSONNode ToJsonNode()
-    {
-        string moduleName = typeData.definition.Module.Name;
-
-        JSONObject ret = new JSONObject();
-        ret["name"] = methodInfo.Name;
-        ret["type"] = GetRuntimeTypeName(methodInfo.DeclaringType, methodInfo.ContainsGenericParameters);
-        ret["assembly"] = typeData.definition.Module.Name.ToString();
-        ret["isConstructor"] = methodInfo.IsConstructor;
-        ret["isGeneric"] = methodInfo.ContainsGenericParameters;
-        ret["isPublic"] = methodInfo.IsPublic;
-        ret["isStatic"] = methodInfo.IsStatic;
-        ret["isLambda"] = isLambda;
-        ret["ilChanged"] = ilChanged;
-        ret["document"] = document.Url.Substring(Environment.CurrentDirectory.Length + 1);
-
-        if (!methodInfo.IsConstructor)
-            ret["returnType"] = (methodInfo as MethodInfo).ReturnType.ToString();
-
-        JSONArray paraArr = new JSONArray();
-        ret.Add("paramTypes", paraArr);
-        var paras = methodInfo.GetParameters();
-        for(int i = 0, imax = paras.Length; i < imax; i++)
-        {
-            paraArr[i] = GetRuntimeTypeName(paras[i].ParameterType, methodInfo.ContainsGenericParameters);
-        }
-
-        return ret;
-    }
-
-    public override string ToString() => definition.ToString();
-}
-
 public class HookedMethodInfo
 {
     public MethodData baseMethod;
@@ -164,7 +102,7 @@ public class MethodFixStatus
 /// <summary>
 /// 程序集构建器
 /// </summary>
-public class AssemblyDataBuilder
+public class AssemblyPatcher
 {
     /// <summary>
     /// 是否合法，要求baseAssDef中存在的类型和方法签名在newAssDef中必须存在，但newAssDef可以存在新增的类型和方法
@@ -175,9 +113,13 @@ public class AssemblyDataBuilder
     private ModuleDefMD         _baseDllDef;
     private ModuleDefMD         _newDllDef;
     private MethodPatcher       _methodPatcher;
-    private int                 _patchNo;
 
-    public AssemblyDataBuilder(ModuleDefMD baseDllDef, ModuleDefMD newDllDef)
+    public AssemblyPatcher(string moduleName)
+    {
+
+    }
+
+    public AssemblyPatcher(ModuleDefMD baseDllDef, ModuleDefMD newDllDef)
     {
         _baseDllDef = baseDllDef;
         _newDllDef = newDllDef;
@@ -187,10 +129,8 @@ public class AssemblyDataBuilder
         _methodPatcher = new MethodPatcher(assemblyData);
     }
 
-    public bool DoBuild(int patchNo)
+    public bool DoPatch()
     {
-        _patchNo = patchNo;
-
         assemblyData.baseTypes.Clear ();
         assemblyData.newTypes.Clear ();
         assemblyData.addedTypes.Clear();
@@ -483,11 +423,12 @@ public class AssemblyDataBuilder
     
     void FixNewAssembly()
     {
+        int patchNo = GlobalConfig.Instance.patchNo;
         // .net 不允许加载同名Assembly，因此需要改名
-        _newDllDef.Assembly.Name = string.Format(InputArgs.Instance.patchDllPath, Path.GetFileNameWithoutExtension(_baseDllDef.Name), _patchNo);
+        //_newDllDef.Assembly.Name = string.Format(InputArgs.Instance.patchDllPath, Path.GetFileNameWithoutExtension(_baseDllDef.Name), patchNo);
         {
             var ver = _newDllDef.Assembly.Version;
-            ver = new Version(ver.Major, ver.Minor, ver.Build, ver.Revision + _patchNo);
+            ver = new Version(ver.Major, ver.Minor, ver.Build, ver.Revision + patchNo);
             _newDllDef.Assembly.Version = ver;
         }
 
@@ -568,7 +509,7 @@ public class AssemblyDataBuilder
             if(fixedType.Count > 0)
             {
                 var constructors = new List<MethodDef>();
-                var lambdaWrapperBackend = InputArgs.Instance.lambdaWrapperBackend;
+                var lambdaWrapperBackend = GlobalConfig.Instance.lambdaWrapperBackend;
                 foreach (var tdef in fixedType)
                 {
                     if (tdef.FullName.EndsWith(lambdaWrapperBackend, StringComparison.Ordinal))

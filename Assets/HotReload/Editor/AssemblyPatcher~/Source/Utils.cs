@@ -167,12 +167,12 @@ public static class Utils
 
     public static bool IsLambdaStaticType(TypeDef typeDef)
     {
-        return typeDef.ToString().EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
+        return typeDef.ToString().EndsWith(GlobalConfig.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
     public static bool IsLambdaStaticType(string typeSignature)
     {
-        return typeSignature.EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
+        return typeSignature.EndsWith(GlobalConfig.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
     public static bool IsLambdaMethod(MethodDef methodDef)

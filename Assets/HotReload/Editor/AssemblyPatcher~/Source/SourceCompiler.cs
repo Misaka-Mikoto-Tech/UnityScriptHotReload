@@ -14,12 +14,23 @@ namespace AssemblyPatcher;
 public class SourceCompiler
 {
     const int kMaxCompileTime = 60 * 1000;
+
+    public string moduleName { get; private set; }
+    public string outputPath { get; private set; }
+
     private string _rspPath;
     private string _assAttrPath;
+    
+    public SourceCompiler(string moduleName)
+    {
+        this.moduleName = moduleName;
+        outputPath = string.Format(GlobalConfig.Instance.patchDllPathFormat, this.moduleName, GlobalConfig.Instance.patchNo);
+    }
+    
     public int DoCompile()
     {
-        _rspPath = InputArgs.Instance.tempScriptDir + "/__Patch__.rsp";
-        _assAttrPath = InputArgs.Instance.tempScriptDir + "/__Patch__Attr.cs";
+        _rspPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch.rsp";
+        _assAttrPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch_Attr.cs";
 
         GenAssemblyAttributesFile();
         GenRspFile();
@@ -37,12 +48,13 @@ public class SourceCompiler
         sb.AppendLine("using System.Security.Permissions;");
         sb.AppendLine();
         sb.AppendLine("[assembly: Debuggable(DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations | DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints | DebuggableAttribute.DebuggingModes.EnableEditAndContinue)]");
-        // for .net framework
-        sb.AppendLine("[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]");
+
 #if FOR_NET6_0_OR_GREATER
         // for .netcore or newer
-        foreach (var @ref in InputArgs.Instance.userAssemblyPathes.Keys)
-            sb.AppendLine($"[assembly: IgnoresAccessChecksTo(\"{@ref}\")]");
+        sb.AppendLine($"[assembly: IgnoresAccessChecksTo(\"{_moduleName}\")]");
+#else
+        // for .net framework
+        sb.AppendLine("[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]");
 #endif
 
         File.WriteAllText(_assAttrPath, sb.ToString(), Encoding.UTF8);
@@ -52,10 +64,10 @@ public class SourceCompiler
     {
         var sb = new StringBuilder();
         sb.AppendLine("-target:library");
-        sb.AppendLine($"-out:\"{InputArgs.Instance.patchDllPath}\"");
-        foreach(var def in InputArgs.Instance.defines)
+        sb.AppendLine($"-out:\"{outputPath}\"");
+        foreach(var def in GlobalConfig.Instance.defines)
             sb.AppendLine($"-define:{def}");
-        foreach(var @ref in InputArgs.Instance.fallbackAssemblyPathes.Values)
+        foreach(var @ref in GlobalConfig.Instance.assemblyPathes.Values)
             sb.AppendLine($"-r:\"{@ref}\"");
 
 #if FOR_NET6_0_OR_GREATER
@@ -82,7 +94,7 @@ public class SourceCompiler
         sb.AppendLine("/preferreduilang:en-US");
 
         sb.AppendLine($"\"{_assAttrPath}\"");
-        foreach(var src in InputArgs.Instance.filesChanged)
+        foreach(var src in GlobalConfig.Instance.filesToCompile[moduleName])
             sb.AppendLine($"\"{src}\"");
 
         File.WriteAllText(_rspPath, sb.ToString(), Encoding.UTF8);
@@ -91,8 +103,8 @@ public class SourceCompiler
     int RunDotnetCompileProcess()
     {
         var si = new ProcessStartInfo();
-        si.FileName = InputArgs.Instance.dotnetPath;
-        si.Arguments = $"exec \"{InputArgs.Instance.cscPath}\" /nostdlib /noconfig /shared \"@{_rspPath}\"";
+        si.FileName = GlobalConfig.Instance.dotnetPath;
+        si.Arguments = $"exec \"{GlobalConfig.Instance.cscPath}\" /nostdlib /noconfig /shared \"@{_rspPath}\"";
 
         si.CreateNoWindow = false;
         si.UseShellExecute = false;

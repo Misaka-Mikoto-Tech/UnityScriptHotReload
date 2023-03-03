@@ -85,13 +85,13 @@ namespace ScriptHotReload
             
             public string tempScriptDir;
             public string builtinAssembliesDir;
-            public string patchDllPath;
+            public string patchDllPathFormat;
             public string lambdaWrapperBackend;
 
             public string[] filesChanged;
 
             public string[] defines;
-            public string[] fallbackAssemblyPathes;
+            public string[] allAssemblyPathes;
         }
         static void GenPatcherInputArgsFile()
         {
@@ -101,15 +101,15 @@ namespace ScriptHotReload
             inputArgs.dotnetPath = _dotnetPath;
             inputArgs.cscPath = _cscPath;
             
-            inputArgs.tempScriptDir = $"{inputArgs.workDir}/{kTempScriptDir}";
-            inputArgs.builtinAssembliesDir = $"{inputArgs.workDir}/{kBuiltinAssembliesDir}";
-            inputArgs.patchDllPath = $"{inputArgs.workDir}/{string.Format(kPatchDllPathFormat, patchNo)}";
+            inputArgs.tempScriptDir = kTempScriptDir;
+            inputArgs.builtinAssembliesDir = kBuiltinAssembliesDir;
+            inputArgs.patchDllPathFormat = kPatchDllPathFormat;
             inputArgs.lambdaWrapperBackend = kLambdaWrapperBackend;
 
             inputArgs.filesChanged = FileWatcher.GetChangedFile();
 
             inputArgs.defines = EditorUserBuildSettings.activeScriptCompilationDefines;
-            inputArgs.fallbackAssemblyPathes = GetFallbackAssemblyPaths();
+            inputArgs.allAssemblyPathes = GetAllAssemblyPaths();
 
             string jsonStr = JsonUtility.ToJson(inputArgs, true);
             File.WriteAllText(kAssemblyPatcherInput, jsonStr, Encoding.UTF8);

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using NHibernate.Util;
+using System.Diagnostics;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -35,12 +36,38 @@ internal class Program
         {
             do
             {
-                InputArgs.LoadFromFile(args[0]);
-                Environment.CurrentDirectory = InputArgs.Instance.workDir;
-                if (new SourceCompiler().DoCompile() != 0)
-                    break;
-                //if (!new Patcher(args[1]).DoPatch())
-                //    break;
+                GlobalConfig.LoadFromFile(args[0]);
+                Environment.CurrentDirectory = GlobalConfig.Instance.workDir;
+                
+                // 多线程编译
+                var compileTasks = new Dictionary<SourceCompiler, Task<int>>();
+                foreach (var moduleName in GlobalConfig.Instance.filesToCompile.Keys)
+                {
+                    var compiler = new SourceCompiler(moduleName);
+                    compileTasks.Add(compiler, Task.Run(compiler.DoCompile));
+                }
+
+                foreach(var (compiler, task) in compileTasks)
+                {
+                    task.Wait();
+                    if (task.Result != 0)
+                        break;
+
+                    GlobalConfig.Instance.assemblyPathes.Add(Path.GetFileNameWithoutExtension(compiler.outputPath), compiler.outputPath);
+                }
+
+                // 多线程 Patch
+                var patcherTasks = new List<Task<bool>>();
+                foreach (var moduleName in GlobalConfig.Instance.filesToCompile.Keys)
+                    patcherTasks.Add(Task.Run(new AssemblyPatcher(moduleName).DoPatch));
+
+                foreach (var task in patcherTasks)
+                {
+                    task.Wait();
+                    if (!task.Result)
+                        break;
+                }
+
                 success = true;
             } while (false);
         }

@@ -41,14 +41,27 @@ namespace ScriptHotReload
                 EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
+        /// <summary>
+        /// 获取发生发生改变的文件列表, (FilePath:AssemblyName)
+        /// </summary>
+        /// <returns></returns>
         public static string[] GetChangedFile()
         {
-            var ret = new List<string>();
+            var ret = new List<string>((int)(_filesChanged.Count * 1.5f));
             lock(_locker)
             {
                 ret.AddRange(_filesChanged.Keys);
                 changedSinceLastGet = false;
             }
+
+            for(int i = 0, imax = ret.Count; i < imax; i++)
+            {
+                string filePath = ret[i];
+                string assName = UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(filePath);
+                Debug.Assert(!string.IsNullOrEmpty(assName));
+                ret[i] = $"{filePath}:{Path.GetFileNameWithoutExtension(assName)}";
+            }
+
             return ret.ToArray();
         }
 
@@ -114,18 +127,18 @@ namespace ScriptHotReload
         {
             if (!_isWatching) return; // 此回调函数不在主线程执行，因此不能使用 Application.isPlaying 判断
 
-            var fullPath = e.FullPath.Replace('\\', '/');
-            if (fullPath.Contains("/HotReload/Editor/")) return; // 插件自身路径，不reload
+            var filePath = e.FullPath.Replace('\\', '/').Substring(Environment.CurrentDirectory.Length + 1);
+            if (filePath.Contains("/HotReload/Editor/")) return; // 插件自身路径，不reload
 
-            if(!File.Exists(fullPath)) return;
+            if(!File.Exists(filePath)) return;
 
             var now = DateTime.Now;
             lock(_locker)
             {
-                if (!_filesChanged.TryGetValue(fullPath, out FileEntry entry))
+                if (!_filesChanged.TryGetValue(filePath, out FileEntry entry))
                 {
-                    entry = new FileEntry() { path = fullPath, version = 0, lastModify = now };
-                    _filesChanged.Add(fullPath, entry);
+                    entry = new FileEntry() { path = filePath, version = 0, lastModify = now };
+                    _filesChanged.Add(filePath, entry);
                 }
                 entry.version++;
                 entry.lastModify = now;
