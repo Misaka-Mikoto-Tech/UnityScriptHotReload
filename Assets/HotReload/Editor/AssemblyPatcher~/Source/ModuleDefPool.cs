@@ -1,5 +1,6 @@
 ﻿using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
+using NHibernate.Mapping;
 using SimpleJSON;
 using System;
 using System.Collections.Generic;
@@ -8,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using TypeDef = dnlib.DotNet.TypeDef;
 
 namespace AssemblyPatcher;
 
@@ -16,13 +18,15 @@ namespace AssemblyPatcher;
 /// </summary>
 public static class ModuleDefPool
 {
-    static ModuleContext _ctx;
+    public static ModuleContext ctx { get; private set; }
     static Dictionary<string, Assembly> _allAssemblies = new Dictionary<string, Assembly>();
     static Dictionary<string, ModuleDefData> _moduleDatas = new Dictionary<string, ModuleDefData>();
 
+    static object _locker = new object();
+
     static ModuleDefPool()
     {
-        // 提前把相关dll都载入，方便查找对应类型
+        // 提前把相关dll都载入，方便查找对应类型(需要在Patch Dll生成完毕之后再调用)
         Stopwatch sw = new Stopwatch();
         sw.Start();
         foreach (var kv in GlobalConfig.Instance.assemblyPathes)
@@ -50,39 +54,76 @@ public static class ModuleDefPool
     /// <returns></returns>
     public static ModuleDefData GetModuleData(string moduleName)
     {
-        if(!_moduleDatas.TryGetValue(moduleName, out var defData))
+        ModuleDefData ret;
+        lock(_locker)
         {
-            string fullPath = GlobalConfig.Instance.assemblyPathes[moduleName];
-
-            defData = new ModuleDefData();
-            defData.moduleDef = ModuleDefMD.Load(fullPath, _ctx);
-            defData.assembly = _allAssemblies[moduleName];
-
-            var types = defData.moduleDef.Types;
-            foreach (var t in types)
-                GenTypeInfos(t, null, defData.types);
-
-            _moduleDatas.Add(moduleName, defData);
+            _moduleDatas.TryGetValue(moduleName, out ret);
         }
 
-        return defData;
+        if(ret is null)
+        {
+            ret = RegisterModuleData(moduleName);
+        }
+
+        return ret;
+    }
+
+    static ModuleDefData RegisterModuleData(string moduleName)
+    {
+        ModuleDefData ret;
+        lock (_locker)
+        {
+            if (_moduleDatas.TryGetValue(moduleName, out ret))
+                return ret;
+        }
+
+        string fullPath = GlobalConfig.Instance.assemblyPathes[moduleName];
+
+        ret = new ModuleDefData() { name = moduleName };
+        ret.moduleDef = ModuleDefMD.Load(fullPath, ctx);
+        ret.assembly = _allAssemblies[moduleName];
+
+        ret.types = new Dictionary<string, TypeData>();
+        var topTypes = ret.moduleDef.Types; // 不包含 NestedType
+        foreach (var t in topTypes)
+            GenTypeInfos(t, null, ret.types);
+
+        ret.allMethods = new Dictionary<string, MethodData>();
+        foreach(var (_, typeData) in ret.types)
+        {
+            foreach(var (methodName, methodData) in typeData.methods)
+            {
+                ret.allMethods.Add(methodName, methodData);
+            }
+        }
+
+        lock(_locker)
+        {
+            if (!_moduleDatas.TryAdd(moduleName, ret))
+                ret = _moduleDatas[moduleName];
+        }
+        
+        return ret;
     }
 
     static void ClearAll()
     {
-        foreach(var kv in _moduleDatas)
+        lock(_locker)
         {
-            kv.Value.moduleDef.Dispose();
+            foreach (var kv in _moduleDatas)
+            {
+                kv.Value.moduleDef.Dispose();
+            }
+            _moduleDatas.Clear();
         }
-        _moduleDatas.Clear();
     }
 
     static void CreateCtx()
     {
         {
             var baseResolver = new dnlib.DotNet.AssemblyResolver();
-            _ctx = new ModuleContext(baseResolver, null);
-            baseResolver.DefaultModuleContext = _ctx;
+            ctx = new ModuleContext(baseResolver, null);
+            baseResolver.DefaultModuleContext = ctx;
 
             foreach (var ass in GlobalConfig.Instance.searchPaths)
                 baseResolver.PostSearchPaths.Add(ass);
@@ -92,6 +133,9 @@ public static class ModuleDefPool
 
     static void GenTypeInfos(TypeDef typeDefinition, TypeData parent, Dictionary<string, TypeData> types)
     {
+        /*
+         * 此方法会被多线程调用，因此不可以使用类变量
+         */
         TypeData typeData = new TypeData();
         typeData.definition = typeDefinition;
         typeData.parent = parent;
@@ -124,13 +168,47 @@ public static class ModuleDefPool
             GenTypeInfos(nest, typeData, types);
         }
     }
+
+    /// <summary>
+    /// 由于并不是每个 ModuleData 都需要这个字段，因此按需填充
+    /// </summary>
+    public static void FillReflectMethodField(ModuleDefData moduleDefData)
+    {
+        Assembly ass = (from ass_ in _allAssemblies.Values where ass_.ManifestModule.Name == moduleDefData.name select ass_).FirstOrDefault();
+        Debug.Assert(ass != null);
+
+        var dicTypes = new Dictionary<TypeDef, Type>();
+        foreach (var (_, typeData) in moduleDefData.types)
+        {
+            foreach(var (_, methodData) in typeData.methods)
+            {
+                if (methodData.reflectMethod != null)
+                    continue;
+
+                var definition = methodData.definition;
+                if (!dicTypes.TryGetValue(definition.DeclaringType, out var t))
+                {
+                    t = ass.GetType(definition.DeclaringType.FullName.Replace('/', '+'));
+                    Debug.Assert(t != null);
+                    dicTypes.Add(definition.DeclaringType, t);
+                }
+                methodData.reflectMethod = Utils.GetReflectMethodSlow(t, definition);
+                if (methodData.reflectMethod == null)
+                {
+                    Debug.LogError($"can not find MethodInfo of [{methodData.definition.FullName}]");
+                }
+            }
+        }
+    }
 }
 
 public class ModuleDefData
 {
+    public string name;
     public ModuleDef moduleDef;
     public Assembly assembly;
     public Dictionary<string, TypeData> types;
+    public Dictionary<string, MethodData> allMethods; // 所有方法，用于快速访问
 }
 
 public class TypeData
@@ -151,14 +229,14 @@ public class MethodData
     // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
     public TypeData typeData;
     public MethodDef definition;
-    public MethodBase methodInfo;
+    public MethodBase reflectMethod;
     public bool isLambda;
     public bool ilChanged;
     public PdbDocument document;
 
     public MethodData(TypeData typeData, MethodDef definition, MethodInfo methodInfo, bool isLambda)
     {
-        this.typeData = typeData; this.definition = definition; this.methodInfo = methodInfo; this.isLambda = isLambda;
+        this.typeData = typeData; this.definition = definition; this.reflectMethod = methodInfo; this.isLambda = isLambda;
         this.document = Utils.GetDocOfMethod(definition);
     }
 
@@ -167,26 +245,26 @@ public class MethodData
         string moduleName = typeData.definition.Module.Name;
 
         JSONObject ret = new JSONObject();
-        ret["name"] = methodInfo.Name;
-        ret["type"] = Utils.GetRuntimeTypeName(methodInfo.DeclaringType, methodInfo.ContainsGenericParameters);
+        ret["name"] = reflectMethod.Name;
+        ret["type"] = Utils.GetRuntimeTypeName(reflectMethod.DeclaringType, reflectMethod.ContainsGenericParameters);
         ret["assembly"] = typeData.definition.Module.Name.ToString();
-        ret["isConstructor"] = methodInfo.IsConstructor;
-        ret["isGeneric"] = methodInfo.ContainsGenericParameters;
-        ret["isPublic"] = methodInfo.IsPublic;
-        ret["isStatic"] = methodInfo.IsStatic;
+        ret["isConstructor"] = reflectMethod.IsConstructor;
+        ret["isGeneric"] = reflectMethod.ContainsGenericParameters;
+        ret["isPublic"] = reflectMethod.IsPublic;
+        ret["isStatic"] = reflectMethod.IsStatic;
         ret["isLambda"] = isLambda;
         ret["ilChanged"] = ilChanged;
         ret["document"] = document.Url.Substring(Environment.CurrentDirectory.Length + 1);
 
-        if (!methodInfo.IsConstructor)
-            ret["returnType"] = (methodInfo as MethodInfo).ReturnType.ToString();
+        if (!reflectMethod.IsConstructor)
+            ret["returnType"] = (reflectMethod as MethodInfo).ReturnType.ToString();
 
         JSONArray paraArr = new JSONArray();
         ret.Add("paramTypes", paraArr);
-        var paras = methodInfo.GetParameters();
+        var paras = reflectMethod.GetParameters();
         for (int i = 0, imax = paras.Length; i < imax; i++)
         {
-            paraArr[i] = Utils.GetRuntimeTypeName(paras[i].ParameterType, methodInfo.ContainsGenericParameters);
+            paraArr[i] = Utils.GetRuntimeTypeName(paras[i].ParameterType, reflectMethod.ContainsGenericParameters);
         }
 
         return ret;

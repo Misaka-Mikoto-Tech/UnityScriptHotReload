@@ -96,7 +96,7 @@ public static class Utils
     /// <param name="definition"></param>
     /// <returns></returns>
     /// <remarks>TODO 优化性能</remarks>
-    public static MethodBase GetMethodInfoSlow(Type t, MethodDef definition)
+    public static MethodBase GetReflectMethodSlow(Type t, MethodDef definition)
     {
         var flags = BuildBindingFlags(definition);
         bool isConstructor = definition.IsConstructor;
@@ -233,5 +233,17 @@ public static class Utils
         if (!isCorlib)
             fullName += ", " + t.Assembly.GetName().Name;
         return fullName;
+    }
+
+    /// <summary>
+    /// 获取原始dll对应的patch dll名称（无扩展名）
+    /// </summary>
+    /// <param name="baseDllName"></param>
+    /// <returns></returns>
+    public static string GetPatchDllName(string baseDllName)
+    {
+        string ret = string.Format(GlobalConfig.Instance.patchDllPathFormat, Path.GetFileNameWithoutExtension(baseDllName), GlobalConfig.Instance.patchNo);
+        ret = Path.GetFileNameWithoutExtension(ret);
+        return ret;
     }
 }

@@ -19,10 +19,10 @@ namespace AssemblyPatcher;
 
 public class MethodPatcher
 {
-    AssemblyData _assemblyData;
-    public MethodPatcher(AssemblyData assemblyData)
+    AssemblyDataForPatch _assemblyDataForPatch;
+    public MethodPatcher(AssemblyDataForPatch assemblyData)
     {
-        _assemblyData = assemblyData;
+        _assemblyDataForPatch = assemblyData;
     }
 
     public void PatchMethod(MethodDef methodDef, Dictionary<MethodDef, MethodFixStatus> processed, int depth)
@@ -37,12 +37,12 @@ public class MethodPatcher
             return;
 
         var sig = methodDef.ToString();
-        if (_assemblyData.methodsNeedHook.ContainsKey(sig))
+        if (_assemblyDataForPatch.baseDllData.allMethods.ContainsKey(sig))
             fixStatus.needHook = true;
 
         // 参数和返回值由于之前已经检查过名称是否一致，因此是二进制兼容的，可以不进行检查
         var arrIns = methodDef.Body.Instructions.ToArray();
-        var currAssembly = _assemblyData.newDllDef.Assembly;
+        var currAssembly = _assemblyDataForPatch.patchDllData.moduleDef.Assembly;
 
         for (int i = 0, imax = arrIns.Length; i < imax; i++)
         {
@@ -60,24 +60,21 @@ public class MethodPatcher
             {
                 case string constStr:
                     break;
-                case TypeDef typeDef: // 当前Scope(eg.Type)范围内定义的类型，可能是非泛型或者未填充参数的泛型类型
-                    if (typeDef.DefinitionAssembly == currAssembly) // ldtoken   NS_Test.TestCls
+                /*
+                 * TypeDef: 当前Scope(eg.Type)范围内定义的类型，可能是非泛型或者未填充参数的泛型类型
+                 * TypeRef: 纯虚类 TypeRef 只有两个子类：TypeRefMD 和 TypeRefUser, 分别对应从metadata里读取的原有类型和用户后添加的类型
+                 */
+                case ITypeDefOrRef typeDefOrRef:
+                    if (typeDefOrRef.DefinitionAssembly == currAssembly) // ldtoken   NS_Test.TestCls
                     {
-                        var baseTypeRef = _assemblyData.GetTypeRefFromBaseType(typeDef);
-                        if (baseTypeRef is null)
-                            throw new Exception($"can not find type `{typeDef.FullName}` in basedll");
-
-                        ins.Operand = baseTypeRef;
+                        var baseTypeRef = _assemblyDataForPatch.GetTypeRefFromBaseType(typeDefOrRef);
+                        if (baseTypeRef is not null)
+                            ins.Operand = baseTypeRef;
+                        else { } // PatchDll 内新增的类型
                     }
                     break;
                 case FieldDef fieldDef:
                     // TODO isArray? isGeneric?
-                    break;
-                case TypeRef typeRef: // 纯虚类 TypeRef 只有两个子类：TypeRefMD 和 TypeRefUser, 分别对应从metadata里读取的原有类型和用户后添加的类型
-                    if(typeRef.DefinitionAssembly == currAssembly)
-                    {
-
-                    }
                     break;
                 case MemberRef memberRef:
                     if (memberRef.DeclaringType.DefinitionAssembly == currAssembly)
@@ -290,13 +287,13 @@ public class MethodPatcher
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsDefInCurrentAssembly(TypeRef typeRef)
     {
-        return typeRef.Scope == _assemblyData.newDllDef;
+        return typeRef.Scope == _assemblyDataForPatch.newDllDef;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsDefInCurrentAssembly(MemberRef memberRef)
     {
-        return memberRef.DeclaringType.Scope == _assemblyData.newDllDef;
+        return memberRef.DeclaringType.Scope == _assemblyDataForPatch.newDllDef;
     }
 
 
