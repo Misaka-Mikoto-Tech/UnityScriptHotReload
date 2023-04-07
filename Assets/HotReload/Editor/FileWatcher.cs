@@ -81,6 +81,9 @@ namespace ScriptHotReload
 
         private static void StartWatch()
         {
+            _fileSystemWatchers.Clear();
+            _filesChanged.Clear();
+
             HashSet<string> allDirs = new HashSet<string>(dirsToWatch);
 
             //foreach (string dir in dirsToWatch)
@@ -121,6 +124,7 @@ namespace ScriptHotReload
                 watcher.Value.Dispose();
             }
             _fileSystemWatchers.Clear();
+            _filesChanged.Clear();
         }
 
         private static void OnFileChanged(object source, FileSystemEventArgs e)

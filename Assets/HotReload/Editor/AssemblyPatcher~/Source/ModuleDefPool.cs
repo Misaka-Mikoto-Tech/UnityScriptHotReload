@@ -80,8 +80,11 @@ public static class ModuleDefPool
         string fullPath = GlobalConfig.Instance.assemblyPathes[moduleName];
 
         ret = new ModuleDefData() { name = moduleName };
-        ret.moduleDef = ModuleDefMD.Load(fullPath, ctx);
         ret.assembly = _allAssemblies[moduleName];
+        ret.moduleDef = ModuleDefMD.Load(fullPath, ctx);
+
+        ret.assRef = new AssemblyRefUser(ret.moduleDef.Assembly);
+        ret.moduleRef = new ModuleRefUser(ret.moduleDef);
 
         ret.types = new Dictionary<string, TypeData>();
         var topTypes = ret.moduleDef.Types; // 不包含 NestedType
@@ -89,11 +92,17 @@ public static class ModuleDefPool
             GenTypeInfos(t, null, ret.types);
 
         ret.allMethods = new Dictionary<string, MethodData>();
+        ret.allMembers = new Dictionary<string, IMemberRef>();
         foreach(var (_, typeData) in ret.types)
         {
             foreach(var (methodName, methodData) in typeData.methods)
             {
                 ret.allMethods.Add(methodName, methodData);
+            }
+
+            foreach(var (memberName, memberRef) in typeData.members)
+            {
+                ret.allMembers.Add(memberName, memberRef);
             }
         }
 
@@ -155,12 +164,19 @@ public static class ModuleDefPool
 
             // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
             var data = new MethodData(typeData, method, null, Utils.IsLambdaMethod(method));
-            typeData.methods.Add(method.ToString(), data);
+            string fullName = method.ToString();
+            typeData.methods.Add(fullName, data);
+            typeData.members.Add(fullName, method);
         }
 
         foreach (var field in typeDefinition.Fields)
         {
-            typeData.fields.Add(field.ToString(), field);
+            typeData.members.Add(field.ToString(), field); // Events 也包含在 Fields 内 
+        }
+
+        foreach(var prop in typeDefinition.Properties)
+        {
+            typeData.members.Add(prop.ToString(), prop);
         }
 
         foreach (var nest in typeDefinition.NestedTypes)
@@ -174,7 +190,7 @@ public static class ModuleDefPool
     /// </summary>
     public static void FillReflectMethodField(ModuleDefData moduleDefData)
     {
-        Assembly ass = (from ass_ in _allAssemblies.Values where ass_.ManifestModule.Name == moduleDefData.name select ass_).FirstOrDefault();
+        Assembly ass = (from ass_ in _allAssemblies.Values where ass_.ManifestModule.Name == moduleDefData.moduleDef.Name select ass_).FirstOrDefault();
         Debug.Assert(ass != null);
 
         var dicTypes = new Dictionary<TypeDef, Type>();
@@ -205,14 +221,28 @@ public static class ModuleDefPool
 public class ModuleDefData
 {
     public string name;
-    public ModuleDef moduleDef;
     public Assembly assembly;
+    public ModuleDef moduleDef;
+
+    public AssemblyRefUser assRef;
+    public ModuleRefUser moduleRef;
+
     public Dictionary<string, TypeData> types;
     public Dictionary<string, MethodData> allMethods; // 所有方法，用于快速访问
+    public Dictionary<string, IMemberRef> allMembers; // 所有的方法，字段，事件，属性，用于快速访问
 }
 
 public class TypeData
 {
+    public TypeSig typeSig { get
+        {
+            if (_typeSig == null)
+                _typeSig = definition.ToTypeSig();
+            return _typeSig;
+        }
+    }
+    private TypeSig _typeSig;
+
     // 不会记录 GenericInstanceType, FixMethod 时遇到会动态创建并替换
     public TypeDef definition;
 
@@ -221,7 +251,7 @@ public class TypeData
     public TypeData childLambdaStaticType; // TypeName/<>c
 
     public Dictionary<string, MethodData> methods = new Dictionary<string, MethodData>();
-    public Dictionary<string, FieldDef> fields = new Dictionary<string, FieldDef>();
+    public Dictionary<string, IMemberRef> members = new Dictionary<string, IMemberRef>(); // 方法，字段，事件，属性
 }
 
 public class MethodData

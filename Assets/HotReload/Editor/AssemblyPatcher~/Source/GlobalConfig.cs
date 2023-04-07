@@ -35,32 +35,32 @@ public class GlobalConfig
     public static void LoadFromFile(string inputFilePath)
     {
         JSONNode root = JSON.Parse(File.ReadAllText(inputFilePath, Encoding.UTF8));
-        GlobalConfig args = new GlobalConfig();
-        args.patchNo = root["patchNo"];
-        args.workDir = root["workDir"];
-        args.dotnetPath = root["dotnetPath"];
-        args.cscPath = root["cscPath"];
-        args.tempScriptDir = root["tempScriptDir"];
-        args.builtinAssembliesDir = root["builtinAssembliesDir"];
-        args.patchDllPathFormat = root["patchDllPathFormat"];
-        args.lambdaWrapperBackend = root["lambdaWrapperBackend"];
+        GlobalConfig config = new GlobalConfig();
+        config.patchNo = root["patchNo"];
+        config.workDir = root["workDir"];
+        config.dotnetPath = root["dotnetPath"];
+        config.cscPath = root["cscPath"];
+        config.tempScriptDir = root["tempScriptDir"];
+        config.builtinAssembliesDir = root["builtinAssembliesDir"];
+        config.patchDllPathFormat = root["patchDllPathFormat"];
+        config.lambdaWrapperBackend = root["lambdaWrapperBackend"];
 
-        args.defines = root["defines"];
+        config.defines = root["defines"];
         string[] allAsses = root["allAssemblyPathes"];
-        args.assemblyPathes = new Dictionary<string, string>();
-        args.userAssemblyPathes = new Dictionary<string, string>();
-        args.searchPaths = new HashSet<string>();
+        config.assemblyPathes = new Dictionary<string, string>();
+        config.userAssemblyPathes = new Dictionary<string, string>();
+        config.searchPaths = new HashSet<string>();
 
-        args.filesToCompile = new Dictionary<string, List<string>>();
+        config.filesToCompile = new Dictionary<string, List<string>>();
         foreach(var str in (string[])root["filesChanged"])
         {
             string[] kv = str.Split(':');
             string filePath = kv[0];
             string assemblyName = kv[1];
-            if(!args.filesToCompile.TryGetValue(assemblyName, out var files))
+            if(!config.filesToCompile.TryGetValue(assemblyName, out var files))
             {
                 files = new List<string>();
-                args.filesToCompile.Add(assemblyName, files);
+                config.filesToCompile.Add(assemblyName, files);
             }
             files.Add(filePath);
         }
@@ -68,20 +68,20 @@ public class GlobalConfig
         foreach (string ass in allAsses)
         {
             string fileNameNoExt = Path.GetFileNameWithoutExtension(ass);
-            args.assemblyPathes.TryAdd(fileNameNoExt, ass);
+            config.assemblyPathes.TryAdd(fileNameNoExt, ass);
 
             if (!ass.Contains("Library/ScriptAssemblies"))
-                args.searchPaths.Add(Path.GetDirectoryName(ass));
+                config.searchPaths.Add(Path.GetDirectoryName(ass));
 
             // 默认认为用户不会修改unity官方代码, 可根据自己需求自行调整
-            if(ass.StartsWith(args.workDir) && !ass.Contains("/com.unity."))
+            if(ass.StartsWith(config.workDir) && !ass.Contains("/com.unity."))
             {
                 if (!fileNameNoExt.StartsWith("Unity")
                     && !fileNameNoExt.StartsWith("System."))
-                        args.userAssemblyPathes.Add(fileNameNoExt, ass);
+                        config.userAssemblyPathes.Add(fileNameNoExt, ass);
             }
         }
 
-        Instance = args;
+        Instance = config;
     }
 }

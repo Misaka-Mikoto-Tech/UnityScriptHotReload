@@ -8,9 +8,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AssemblyPatcher", "Assembly
 		{807D9000-F5C0-49DA-A30E-33079D11E9FF} = {807D9000-F5C0-49DA-A30E-33079D11E9FF}
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dnlib", "..\..\..\..\..\..\..\Sources\dnlib\src\dnlib.csproj", "{807D9000-F5C0-49DA-A30E-33079D11E9FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dnlib", "..\..\..\..\..\..\..\Source\dnlib\src\dnlib.csproj", "{807D9000-F5C0-49DA-A30E-33079D11E9FF}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Examples", "..\..\..\..\..\..\..\Sources\dnlib\Examples\Examples.csproj", "{38830995-0505-4A67-8105-3B88E6783101}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Examples", "..\..\..\..\..\..\..\Source\dnlib\Examples\Examples.csproj", "{38830995-0505-4A67-8105-3B88E6783101}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

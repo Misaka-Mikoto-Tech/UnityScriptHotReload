@@ -96,7 +96,7 @@ namespace ScriptHotReload
         static void GenPatcherInputArgsFile()
         {
             var inputArgs = new InputArgs();
-            inputArgs.patchNo = patchNo++;
+            inputArgs.patchNo = patchNo;
             inputArgs.workDir = Environment.CurrentDirectory.Replace('\\', '/');
             inputArgs.dotnetPath = _dotnetPath;
             inputArgs.cscPath = _cscPath;

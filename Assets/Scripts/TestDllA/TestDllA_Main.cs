@@ -1,4 +1,4 @@
-﻿//#define APPLY_PATCH
+﻿#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -12,15 +12,34 @@ namespace NS_Test
 
     public struct TestStruct
     {
+        public static float f;
+
         public int x;
         public bool y;
     }
 
-#if APPLY_PATCH
+    public struct TestStruct2
+    {
+        public static float f;
+        public string propA { get; private set; }
+
+        public event Action<int> evtA;
+
+        public int x;
+        public bool y;
+    }
+
+#if APPLY_PATCH || true
     public class NewTestClass
     {
+        public List<List<TestStruct[]>> lst1 = new List<List<TestStruct[]>>();
+        public List<List<TestClsG<TestStruct>[]>> lst2 = new List<List<TestClsG<TestStruct>[]>>();
+        public List<List<TestClsG<int>[]>[]> lst3 = new List<List<TestClsG<int>[]>[]>();
+        public List<List<int[]>> lst4 = new List<List<int[]>>();
+        public int[] arrInt = new int[10];
         public static int val;
         public int x;
+
         static NewTestClass()
         {
             // 请注意，新增类的静态构造函数尽量不要影响其它类数据，且此函数每次被reload都会执行
@@ -28,9 +47,37 @@ namespace NS_Test
             Debug.Log("NewTestClass static constructor");
         }
 
-        public int Add(int y)
+        public int Add(int y, int z)
         {
-            return x + y + val;
+            TestStruct.f = 6.28f;
+            TestStruct testStruct = new TestStruct();
+            testStruct.x = 3;
+
+            TestStruct2 testStruct2 = new TestStruct2();
+            testStruct2.evtA += x => { };
+            Debug.Log(testStruct2.propA.GetType().Name);
+
+            Debug.Log(typeof(TestStruct2).GetProperty("propA").IsSpecialName);
+
+            Debug.Log(typeof(List<List<TestStruct[]>>));
+            Debug.Log(typeof(List<List<TestClsG<TestStruct>[]>>));
+            Debug.Log(typeof(List<List<TestClsG<int>[]>[]>));
+            Debug.Log(typeof(List<List<int[]>>));
+            Debug.Log(typeof(int[]));
+
+            int xx = AddG(3, 2.5f);
+            var testCls = new TestClsG<float>();
+            testCls.FuncA(12);
+            testCls.FuncB(34, 5.6f);
+            testCls.ShowGA<bool>(7.8f, true);
+            testCls.ShowGB(9.1f, 2000);
+
+            return lst1.Count + lst2.Count + lst3.Count + lst4.Count + arrInt.Length + val + x + xx + y + z + 5;
+        }
+
+        public int AddG<T>(int xx, T yy)
+        {
+            return xx + 1;
         }
     }
 #endif
@@ -142,7 +189,7 @@ namespace NS_Test
 
             var newCls = new NewTestClass();
             newCls.x = 1;
-            Debug.Log($"NewTestClass.Add:{newCls.Add(3)}");
+            Debug.Log($"NewTestClass.Add:{newCls.Add(3, 5)}");
 
             var test2 = new TestDll_2();
             int z = test2.Mul_2(5, 6);
@@ -285,6 +332,17 @@ namespace NS_Test
             {
                 return arg2;
             }
+        }
+
+        public bool FuncA(int x)
+        {
+            return x + 1 > 0;
+        }
+
+        public bool FuncB(int y, T arg1)
+        {
+            Debug.Log(arg1.GetType().FullName);
+            return y > 10;
         }
 
         public string str;

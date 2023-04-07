@@ -51,7 +51,7 @@ internal class Program
                 {
                     task.Wait();
                     if (task.Result != 0)
-                        break;
+                        goto Fail;
 
                     GlobalConfig.Instance.assemblyPathes.Add(Path.GetFileNameWithoutExtension(compiler.outputPath), compiler.outputPath);
                 }
@@ -65,10 +65,12 @@ internal class Program
                 {
                     task.Wait();
                     if (!task.Result)
-                        break;
+                        goto Fail;
                 }
 
                 success = true;
+                break;
+            Fail:;
             } while (false);
         }
         catch(Exception ex)

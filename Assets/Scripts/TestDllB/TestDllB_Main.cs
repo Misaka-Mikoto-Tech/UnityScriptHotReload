@@ -8,7 +8,7 @@ namespace NS_Test
     {
         public static int Calc(int x, int y)
         {
-            return x * 10 + y * 5;
+            return x * 10 + y * 5 + 2;
         }
     }
 

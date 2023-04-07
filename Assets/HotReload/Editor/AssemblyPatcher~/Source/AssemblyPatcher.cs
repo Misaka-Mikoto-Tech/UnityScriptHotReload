@@ -24,6 +24,7 @@ using NHibernate.Mapping;
 using TypeDef = dnlib.DotNet.TypeDef;
 using dnlib.DotNet.MD;
 using Remotion.Linq.Parsing.Structure.NodeTypeProviders;
+using dnlib.DotNet.Writer;
 
 namespace AssemblyPatcher;
 
@@ -76,6 +77,7 @@ public class AssemblyPatcher
         _methodPatcher = new MethodPatcher(assemblyDataForPatch);
 
         FixNewAssembly();
+        WriteToFile();
         isValid = true;
         return isValid;
     }
@@ -83,10 +85,6 @@ public class AssemblyPatcher
     void FixNewAssembly()
     {
         int patchNo = GlobalConfig.Instance.patchNo;
-
-        // 一般而言patchdll一定会引用原始dll，因此提前生成引用
-        assemblyDataForPatch.baseRefAtNewAss = new AssemblyRefUser(assemblyDataForPatch.baseDllData.moduleDef.Assembly);
-        assemblyDataForPatch.baseRefAtNewDll = new ModuleRefUser(assemblyDataForPatch.baseDllData.moduleDef);
 
         var processed = new Dictionary<MethodDef, MethodFixStatus>();
         foreach (var (_, methodData) in assemblyDataForPatch.patchDllData.allMethods)
@@ -124,7 +122,7 @@ public class AssemblyPatcher
                             constructors.Add(mdef);
                     }
                 }
-                RemoveStaticConstructorsBody(constructors);
+                //RemoveStaticConstructorsBody(constructors); // TODO 直接移除会导致pdb找不到指令，尝试解决此问题，或者直接在指令最前面插入一个ret指令
             }
 
 #if SCRIPT_PATCH_DEBUG
@@ -161,6 +159,14 @@ public class AssemblyPatcher
             ins.Clear();
             ins.Add(OpCodes.Ret.ToInstruction());
         }
+    }
+
+    void WriteToFile()
+    {
+        string path = assemblyDataForPatch.patchDllData.assembly.Location;
+        path = $"{Path.GetDirectoryName(path)}/{Path.GetFileNameWithoutExtension(path)}_fix.dll";
+        var opt = new ModuleWriterOptions(assemblyDataForPatch.patchDllData.moduleDef) { WritePdb = true };
+        assemblyDataForPatch.patchDllData.moduleDef.Write(path, opt);
     }
 }
 
