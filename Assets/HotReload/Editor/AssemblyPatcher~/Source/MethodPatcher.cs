@@ -71,56 +71,51 @@ public class MethodPatcher
             Instruction ins = arrIns[i];
             if (ins.OpCode.OperandType == OperandType.InlineNone)
                 continue;
-            /*
-            * Field 有两种类型: FieldReference/FieldDefinition, 经过研究发现 FieldReference 指向了当前类型外部的定义（当前Assembly或者引用的Assembly）, 
-            * 而 FieldDefinition 则是当前类型内定义的字段
-            * 因此我们需要检查 FieldDefinition 和 FieldReference, 把它们都替换成原始 Assembly 内同名的 FieldReference
-            * Method/Type 同理, 但 lambda 表达式不进行替换，而是递归修正函数
-            */
 
             OperandType oprandType = ins.OpCode.OperandType;
 
             switch(ins.Operand)
             {
                 /*
-                 * TypeDef: 当前Scope(eg.Type)范围内定义的类型，可能是非泛型或者未填充参数的泛型类型
+                 * TypeDef: 当前Scope(eg. Assembly、NestedType)范围内定义的类型，可能是非泛型或者未实例化的泛型类型
                  * TypeRef: 纯虚类 TypeRef 只有两个子类：TypeRefMD 和 TypeRefUser, 分别对应从metadata里读取的原有类型和用户后添加的类型
+                 * TypeSpec: 泛型类的实例化对象
                  */
                 case ITypeDefOrRef typeDefOrRef:
+                    /*
+                     * 其它dll内的非泛型实例直接跳过（eg. int, bool)
+                     * 请注意！，泛型在其它dll定义但泛型参数在当前dll内时 DefinitionAssembly 也是其它dll, 例如 Action<MyClass> 的定义就在 mscorlib 内
+                     */
                     if ((typeDefOrRef is not TypeSpec) && typeDefOrRef.DefinitionAssembly != patchAssembly)
                         break;
 
-                    var baseType = GetBaseTypeOrRef(typeDefOrRef);
-                    if (baseType is not null)
-                        ins.Operand = baseType;
-                    else { } // PatchDll 内新增的类型, TODO 检查是否有遗漏的 corner case
+                    ins.Operand = GetBaseTypeOrRef(typeDefOrRef);
                     break;
                 case FieldDef fieldDef:
                     ins.Operand = GetBaseFieldRef(fieldDef);
                     break;
-                
-                case IMethodDefOrRef methodDefOrRef: // MethodRef, FieldRef(NestedClass)
-                    if (methodDefOrRef.IsField)
+                /*
+                 * MethodRef, MemberRef(field ref in NestedClass)
+                 * Field 引用定义在 MemberRef 里但是没有一个 FieldRef 类型就很奇怪
+                 */
+                case IMethodDefOrRef methodDefOrRef:
+                    if (methodDefOrRef.IsField) // System.Int32 NS_Test.TestClsG`1/TestClsGInner`1<NS_Test.TestCls,NS_Test.TestDll_2>::innerField_i
                         ins.Operand = GetBaseFieldRef(methodDefOrRef as IField);
                     else
                         ins.Operand = GetBaseMethodRef(methodDefOrRef);
                     break;
-                case MethodSpec methodSpec: // 泛型实例
+                case MethodSpec methodSpec: // 泛型实例，（为什么 TypeSpec 继承自 ITypeDefOrRef， 但 MethodSpec 就不继承自 IMethodDefOrRef 呢？）
                     ins.Operand = GetBaseMethodSpec(methodSpec);
                     break;
                 /*
                  * 此类型判断必须放在最后。对于引用，无法从类型区分字段还是方法, 因此只能使用if判断
                  * IMemberDef 继承自 IMemberRef，因此无需判断
-                 * 当前程序集内对其它类的成员变量的访问, 如果是相同Scope则是FieldDef, 否则是 MemberRef(NestedClass使用独立Scope)
+                 * * 当前程序集内对其它类的成员变量的访问, 如果是相同Scope则是FieldDef, 否则是 MemberRef(NestedClass使用独立Scope) *
                  * 但 FieldRef 已被上面的 IMethodDefOrRef 处理
                  */
                 case IMemberRef memberRef:
                     if (memberRef.IsMethod)
                         ins.Operand = GetBaseMethodRef(memberRef as IMethodDefOrRef);
-                    else if (memberRef.IsEventDef)
-                        throw new NotImplementedException("事件引用尚未实现");
-                    else if(memberRef.IsPropertyDef)
-                        throw new NotImplementedException("属性引用尚未实现");
                     else
                         throw new NotImplementedException($"类型引用尚未实现：{memberRef}");
                     break;
@@ -296,6 +291,8 @@ public class MethodPatcher
         }
 
         ret = GetBaseTypeSig(patchType.ToTypeSig())?.ToTypeDefOrRef();
+        Debug.Assert(ret != null);
+
         lock (s_baseTypeOrRefCache)
         {
             s_baseTypeOrRefCache.TryAdd(fullName, ret);
@@ -321,7 +318,7 @@ public class MethodPatcher
         TypeSig ret = null;
         if (_assemblyDataForPatch.baseDllData.types.TryGetValue(fullName, out var baseTypeData)) // 普通的 TypeDefSig，在 base dll 内有定义
             ret =_importer.Import(baseTypeData.typeSig);
-        else if (patchTypeSig.IsGenericInstanceType)    // 泛型的实例化类型，依次拆开并重建
+        else if (patchTypeSig.IsGenericInstanceType)    // TypeSpec，泛型的实例化类型，依次拆开并重建
             ret = BuildBaseGenericInstTypeSig(patchTypeSig as GenericInstSig);
         else if (patchTypeSig is NonLeafSig nonLeafSig) // 有 []&* 等修饰符的类型，其有Next字段，需要遍历重新创建
         {
@@ -371,6 +368,8 @@ public class MethodPatcher
         }
         else
             ret = patchTypeSig; // TypeRef 等类型，需要仔细检查是否还有遗漏
+
+        Debug.Assert(ret != null);
 
         lock (s_baseTypeSigCache)
             s_baseTypeSigCache.TryAdd(fullName, ret);

@@ -73,11 +73,9 @@ public class AssemblyPatcher
         if (!assemblyDataForPatch.isValid)
             return false;
 
-        ModuleDefPool.FillReflectMethodField(assemblyDataForPatch.patchDllData);
         _methodPatcher = new MethodPatcher(assemblyDataForPatch);
 
         FixNewAssembly();
-        WriteToFile();
         isValid = true;
         return isValid;
     }
@@ -109,9 +107,6 @@ public class AssemblyPatcher
                 var lambdaWrapperBackend = GlobalConfig.Instance.lambdaWrapperBackend;
                 foreach (var tdef in fixedType)
                 {
-                    if (tdef.FullName.EndsWith(lambdaWrapperBackend, StringComparison.Ordinal))
-                        continue;
-
                     // 新定义的类型静态构造函数即使执行也是第一次执行，因此逻辑只能修正不能移除
                     if (assemblyDataForPatch.addedTypes.ContainsKey(tdef.FullName))
                         continue;
@@ -122,7 +117,7 @@ public class AssemblyPatcher
                             constructors.Add(mdef);
                     }
                 }
-                //RemoveStaticConstructorsBody(constructors); // TODO 直接移除会导致pdb找不到指令，尝试解决此问题，或者直接在指令最前面插入一个ret指令
+                StaticConstructorsQuickReturn(constructors);
             }
 
 #if SCRIPT_PATCH_DEBUG
@@ -148,25 +143,36 @@ public class AssemblyPatcher
     /// </summary>
     /// <param name="constructors"></param>
     /// <remarks>新增类的静态构造函数由于是第一次执行，因此不能清空函数体，只能修正</remarks>
-    void RemoveStaticConstructorsBody(List<MethodDef> constructors)
+    void StaticConstructorsQuickReturn(List<MethodDef> constructors)
     {
-        foreach(var ctor in constructors)
+        foreach (var ctor in constructors)
         {
             if (ctor.Name != ".cctor" || !ctor.HasBody)
                 continue;
 
+            // 直接移除会导致pdb找不到指令，因此直接在指令最前面插入一个ret指令
             var ins = ctor.Body.Instructions;
-            ins.Clear();
-            ins.Add(OpCodes.Ret.ToInstruction());
+            ins.Insert(0, OpCodes.Ret.ToInstruction());
         }
     }
 
-    void WriteToFile()
+    public void WriteToFile()
     {
-        string path = assemblyDataForPatch.patchDllData.assembly.Location;
-        path = $"{Path.GetDirectoryName(path)}/{Path.GetFileNameWithoutExtension(path)}_fix.dll";
+        string patchPath = assemblyDataForPatch.patchDllData.moduleDef.Location;
+        string fixPath = $"{Path.GetDirectoryName(patchPath)}/{Path.GetFileNameWithoutExtension(patchPath)}_fix.dll";
+        string patchPdbPath = Path.ChangeExtension(patchPath, ".pdb");
+        string fixPdbPath = Path.ChangeExtension(fixPath, ".pdb");
+
+
         var opt = new ModuleWriterOptions(assemblyDataForPatch.patchDllData.moduleDef) { WritePdb = true };
-        assemblyDataForPatch.patchDllData.moduleDef.Write(path, opt);
+        assemblyDataForPatch.patchDllData.moduleDef.Write(fixPath, opt);
+
+        // 重命名 dll 名字
+        assemblyDataForPatch.patchDllData.Unload();
+        File.Delete(patchPath);
+        File.Delete(patchPdbPath);
+        File.Move(fixPath, patchPath);
+        File.Move(fixPdbPath, patchPdbPath);
     }
 }
 

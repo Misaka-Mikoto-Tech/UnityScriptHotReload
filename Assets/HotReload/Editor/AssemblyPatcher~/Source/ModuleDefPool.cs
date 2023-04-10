@@ -26,24 +26,6 @@ public static class ModuleDefPool
 
     static ModuleDefPool()
     {
-        // 提前把相关dll都载入，方便查找对应类型(需要在Patch Dll生成完毕之后再调用)
-        Stopwatch sw = new Stopwatch();
-        sw.Start();
-        foreach (var kv in GlobalConfig.Instance.assemblyPathes)
-        {
-            try
-            {
-                var ass = Assembly.LoadFrom(kv.Value);
-                _allAssemblies.Add(kv.Key, ass);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"load dll fail:{kv.Value}\r\n:{ex.Message}\r\n{ex.StackTrace}");
-            }
-        }
-        sw.Stop();
-        Debug.LogDebug($"载入相关dll耗时 {sw.ElapsedMilliseconds} ms");
-
         CreateCtx();
     }
 
@@ -80,7 +62,6 @@ public static class ModuleDefPool
         string fullPath = GlobalConfig.Instance.assemblyPathes[moduleName];
 
         ret = new ModuleDefData() { name = moduleName };
-        ret.assembly = _allAssemblies[moduleName];
         ret.moduleDef = ModuleDefMD.Load(fullPath, ctx);
 
         ret.assRef = new AssemblyRefUser(ret.moduleDef.Assembly);
@@ -158,12 +139,11 @@ public static class ModuleDefPool
 
         foreach (var method in typeDefinition.Methods)
         {
-            // 静态构造函数不允许被hook，否则静态构造函数会被自动再次执行导致数据错误
-            if (method.IsAbstract || !method.HasBody || method.Name.Contains(".cctor"))
+            if (method.IsAbstract || !method.HasBody)
                 continue;
 
-            // property getter, setter 也包含在内，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
-            var data = new MethodData(typeData, method, null, Utils.IsLambdaMethod(method));
+            // property 的 getter, setter 也属于 method，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
+            var data = new MethodData(typeData, method, Utils.IsLambdaMethod(method));
             string fullName = method.ToString();
             typeData.methods.Add(fullName, data);
             typeData.members.Add(fullName, method);
@@ -171,7 +151,7 @@ public static class ModuleDefPool
 
         foreach (var field in typeDefinition.Fields)
         {
-            typeData.members.Add(field.ToString(), field); // Events 也包含在 Fields 内 
+            typeData.members.Add(field.ToString(), field); // 带 event 标识的字段也是字段，il 层面没有 event 这个东西
         }
 
         foreach(var prop in typeDefinition.Properties)
@@ -184,44 +164,11 @@ public static class ModuleDefPool
             GenTypeInfos(nest, typeData, types);
         }
     }
-
-    /// <summary>
-    /// 由于并不是每个 ModuleData 都需要这个字段，因此按需填充
-    /// </summary>
-    public static void FillReflectMethodField(ModuleDefData moduleDefData)
-    {
-        Assembly ass = (from ass_ in _allAssemblies.Values where ass_.ManifestModule.Name == moduleDefData.moduleDef.Name select ass_).FirstOrDefault();
-        Debug.Assert(ass != null);
-
-        var dicTypes = new Dictionary<TypeDef, Type>();
-        foreach (var (_, typeData) in moduleDefData.types)
-        {
-            foreach(var (_, methodData) in typeData.methods)
-            {
-                if (methodData.reflectMethod != null)
-                    continue;
-
-                var definition = methodData.definition;
-                if (!dicTypes.TryGetValue(definition.DeclaringType, out var t))
-                {
-                    t = ass.GetType(definition.DeclaringType.FullName.Replace('/', '+'));
-                    Debug.Assert(t != null);
-                    dicTypes.Add(definition.DeclaringType, t);
-                }
-                methodData.reflectMethod = Utils.GetReflectMethodSlow(t, definition);
-                if (methodData.reflectMethod == null)
-                {
-                    Debug.LogError($"can not find MethodInfo of [{methodData.definition.FullName}]");
-                }
-            }
-        }
-    }
 }
 
 public class ModuleDefData
 {
     public string name;
-    public Assembly assembly;
     public ModuleDef moduleDef;
 
     public AssemblyRefUser assRef;
@@ -230,6 +177,12 @@ public class ModuleDefData
     public Dictionary<string, TypeData> types;
     public Dictionary<string, MethodData> allMethods; // 所有方法，用于快速访问
     public Dictionary<string, IMemberRef> allMembers; // 所有的方法，字段，事件，属性，用于快速访问
+
+    public void Unload()
+    {
+        moduleDef?.Dispose();
+        moduleDef = null;
+    }
 }
 
 public class TypeData
@@ -259,42 +212,42 @@ public class MethodData
     // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
     public TypeData typeData;
     public MethodDef definition;
-    public MethodBase reflectMethod;
     public bool isLambda;
-    public bool ilChanged;
     public PdbDocument document;
 
-    public MethodData(TypeData typeData, MethodDef definition, MethodInfo methodInfo, bool isLambda)
+    public MethodData(TypeData typeData, MethodDef definition, bool isLambda)
     {
-        this.typeData = typeData; this.definition = definition; this.reflectMethod = methodInfo; this.isLambda = isLambda;
+        this.typeData = typeData; this.definition = definition; this.isLambda = isLambda;
         this.document = Utils.GetDocOfMethod(definition);
     }
 
     public JSONNode ToJsonNode()
     {
         string moduleName = typeData.definition.Module.Name;
-
+        
         JSONObject ret = new JSONObject();
-        ret["name"] = reflectMethod.Name;
-        ret["type"] = Utils.GetRuntimeTypeName(reflectMethod.DeclaringType, reflectMethod.ContainsGenericParameters);
+        ret["name"] = definition.Name.String;
+        ret["type"] = Utils.GetRuntimeTypeName(typeData.definition.ToTypeSig());
         ret["assembly"] = typeData.definition.Module.Name.ToString();
-        ret["isConstructor"] = reflectMethod.IsConstructor;
-        ret["isGeneric"] = reflectMethod.ContainsGenericParameters;
-        ret["isPublic"] = reflectMethod.IsPublic;
-        ret["isStatic"] = reflectMethod.IsStatic;
+        ret["isConstructor"] = definition.IsConstructor;
+        ret["isGeneric"] = definition.HasGenericParameters;
+        ret["isPublic"] = definition.IsPublic;
+        ret["isStatic"] = definition.IsStatic;
         ret["isLambda"] = isLambda;
-        ret["ilChanged"] = ilChanged;
-        ret["document"] = document.Url.Substring(Environment.CurrentDirectory.Length + 1);
+        ret["isGetterOrSetter"] = definition.IsGetter | definition.IsSetter;
+        ret["document"] = document?.Url.Substring(Environment.CurrentDirectory.Length + 1).Replace('\\', '/');
 
-        if (!reflectMethod.IsConstructor)
-            ret["returnType"] = (reflectMethod as MethodInfo).ReturnType.ToString();
+        if (!definition.IsConstructor)
+            ret["returnType"] = Utils.GetRuntimeTypeName(definition.ReturnType);
 
         JSONArray paraArr = new JSONArray();
         ret.Add("paramTypes", paraArr);
-        var paras = reflectMethod.GetParameters();
-        for (int i = 0, imax = paras.Length; i < imax; i++)
+        var paras = definition.Parameters;
+
+        int skipIdx = definition.HasThis ? 1 : 0;
+        for(int i = 0, imax = paras.Count - skipIdx; i < imax; i++)
         {
-            paraArr[i] = Utils.GetRuntimeTypeName(paras[i].ParameterType, reflectMethod.ContainsGenericParameters);
+            paraArr[i] = Utils.GetRuntimeTypeName(paras[i + skipIdx].Type);
         }
 
         return ret;

@@ -1,4 +1,5 @@
 ﻿using NHibernate.Util;
+using SimpleJSON;
 using System.Diagnostics;
 using System.Text;
 
@@ -58,14 +59,33 @@ internal class Program
 
                 // 多线程 Patch
                 var patcherTasks = new List<Task<bool>>();
+                var patchers = new List<AssemblyPatcher>();
                 foreach (var moduleName in GlobalConfig.Instance.filesToCompile.Keys)
-                    patcherTasks.Add(Task.Run(new AssemblyPatcher(moduleName).DoPatch));
+                {
+                    var patcher = new AssemblyPatcher(moduleName);
+                    patchers.Add(patcher);
+                    patcherTasks.Add(Task.Run(patcher.DoPatch));
+                }
 
                 foreach (var task in patcherTasks)
                 {
                     task.Wait();
                     if (!task.Result)
                         goto Fail;
+                }
+
+                // 生成输出配置文件
+                var methodsNeedHook = new Dictionary<string, List<MethodData>>();
+                foreach (var patcher in patchers)
+                {
+                    methodsNeedHook.Add(patcher.moduleName, new List<MethodData>(patcher.assemblyDataForPatch.patchDllData.allMethods.Values));
+                }
+                GenOutputJsonFile(args[1], methodsNeedHook);
+
+                // 将 patch dll 写入文件
+                foreach (var patcher in patchers)
+                {
+                    patcher.WriteToFile();
                 }
 
                 success = true;
@@ -84,5 +104,42 @@ internal class Program
 
         Debug.Log("Patch成功");
         return 0;
+    }
+
+    static void GenOutputJsonFile(string outputPath, Dictionary<string, List<MethodData>> methodsNeedHook)
+    {
+        /*
+         * {
+         *   "modifiedMethods":[
+         *       {"name":"FuncA", "type":"", "isConstructor": true ...},
+         *       {"name":"FuncB", "type":"", "isConstructor": false ...},
+         *       ...
+         *     ]
+         * }
+         */
+
+        JSONObject root = new JSONObject();
+        root.Add("patchNo", GlobalConfig.Instance.patchNo);
+        JSONArray assChanged = new JSONArray();
+        root.Add("assemblyChangedFromLast", assChanged);
+        JSONArray arrMethodsNeedHook = new JSONArray();
+        root.Add("methodsNeedHook", arrMethodsNeedHook);
+        int idx = 0;
+        foreach (var (ass, methods) in methodsNeedHook)
+        {
+            assChanged.Add(ass);
+            for (int i = 0, imax = methods.Count; i < imax; i++)
+            {
+                // document 为 null 方法没有可见代码，比如 event 字段生成的方法，没有hook的必要
+                if (methods[i].document != null)
+                {
+                    arrMethodsNeedHook[idx++] = methods[i].ToJsonNode();
+                }
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        root.WriteToStringBuilder(sb, 0, 4, JSONTextMode.Indent);
+        File.WriteAllText(outputPath, sb.ToString());
     }
 }
