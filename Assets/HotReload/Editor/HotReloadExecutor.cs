@@ -25,7 +25,14 @@ namespace ScriptHotReload
 
         static Task<int> _patchTask;
         static ConcurrentQueue<string> _patchTaskOutput = new ConcurrentQueue<string>();
-        static List<MethodBase> _methodsToHook = new List<MethodBase>();
+        static Dictionary<string, List<MethodBase>> _methodsToHook = new Dictionary<string, List<MethodBase>>(); // <AssemblyName, List>
+
+        [MenuItem("Tools/Test")]
+        static void Test()
+        {
+            var assPatch = Assembly.LoadFrom(@"G:\Project\UnityScriptHotReload\Temp\ScriptHotReload\TestDllA_Patch_0.dll");
+            UnityEngine.Debug.Log(assPatch != null);
+        }
 
         static HotReloadExecutor()
         {
@@ -56,11 +63,23 @@ namespace ScriptHotReload
                 {
                     if(_patchTask.Result == 0)
                     {
-                        //HookAssemblies.DoHook(_methodsToHook);
-                        if (_methodsToHook.Count > 0)
-                            patchNo++;
+                        try
+                        {
+                            HookAssemblies.DoHook(_methodsToHook);
+                            if (_methodsToHook.Count > 0)
+                                patchNo++;
 
-                        UnityEngine.Debug.Log("<color=yellow>热重载完成</color>");
+                            UnityEngine.Debug.Log("<color=yellow>热重载完成</color>");
+                        }
+                        catch(Exception ex)
+                        {
+                            HookAssemblies.UnHook(_methodsToHook);
+                            UnityEngine.Debug.LogErrorFormat("热重载出错:{0}\r\n{1}", ex.Message, ex.StackTrace);
+                        }
+                    }
+                    else
+                    {
+                        UnityEngine.Debug.LogErrorFormat("生成Patch出错, 停止重载");
                     }
                     _patchTask = null;
                 }
@@ -72,7 +91,7 @@ namespace ScriptHotReload
                 return;
 
             GenPatcherInputArgsFile();
-            //_patchTask = Task.Run(RunAssemblyPatchProcess);
+            _patchTask = Task.Run(RunAssemblyPatchProcess);
         }
 
         [Serializable]
@@ -156,7 +175,17 @@ namespace ScriptHotReload
                 procPathcer.Kill();
 
             if (exitCode == 0)
-                ParseOutputReport();
+            {
+                try
+                {
+                    ParseOutputReport();
+                }
+                catch(Exception ex)
+                {
+                    _patchTaskOutput.Enqueue("[Error][ParseOutput] " + ex.Message);
+                    exitCode = -2;
+                }
+            }
 
             return exitCode;
         }
@@ -190,12 +219,12 @@ namespace ScriptHotReload
             {
                 public string name;
                 public string type;
+                public string assembly;
                 public bool isConstructor;
                 public bool isGeneric;
                 public bool isPublic;
                 public bool isStatic;
                 public bool isLambda;
-                public bool ilChanged;
                 public string document;
                 public string returnType;
                 public string[] paramTypes;
@@ -216,7 +245,10 @@ namespace ScriptHotReload
 
             foreach (var data in outputReport.methodsNeedHook)
             {
-                if (data.isGeneric)
+                if (data.isGeneric) // 泛型方法暂时不处理
+                    continue;
+
+                if (data.isStatic && data.isConstructor) // .cctor
                     continue;
 
                 Type t = Type.GetType(data.type, true);
@@ -239,7 +271,13 @@ namespace ScriptHotReload
                 if (method == null)
                     throw new Exception($"can not find method `{data.name}`");
 
-                _methodsToHook.Add(method);
+                List<MethodBase> lst;
+                if(!_methodsToHook.TryGetValue(data.assembly, out lst))
+                {
+                    lst = new List<MethodBase>();
+                    _methodsToHook.Add(data.assembly, lst);
+                }
+                lst.Add(method);
             }
         }
     }

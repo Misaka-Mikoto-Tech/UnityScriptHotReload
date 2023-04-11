@@ -72,7 +72,7 @@ namespace NS_Test
             testCls.ShowGA<bool>(7.8f, true);
             testCls.ShowGB(9.1f, 2000);
 
-            return lst1.Count + lst2.Count + lst3.Count + lst4.Count + arrInt.Length + val + x + xx + y + z + 5;
+            return lst1.Count + lst2.Count + lst3.Count + lst4.Count + arrInt.Length + val + x + xx + y + z + 19;
         }
 
         public int AddG<T>(int xx, T yy)

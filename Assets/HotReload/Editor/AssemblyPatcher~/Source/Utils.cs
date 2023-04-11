@@ -239,10 +239,30 @@ public static class Utils
 
         fullName = fullName.Replace(s_corlibLibSig, "").Replace(s_systemLibSig, "System").Replace(s_systemXmlLibSig, "System.Xml").Replace(s_defaultSig, "");
 
-        if (!typeDef.Module.Assembly.IsCorLib())
-            fullName += ", " + typeDef.Module.Assembly.Name;
+        if (!typeDef.DefinitionAssembly.IsCorLib())
+            fullName += ", " + typeDef.DefinitionAssembly.Name;
 
         return fullName;
+    }
+
+    /// <summary>
+    /// 递归检查一个方法中是否有泛型参数
+    /// </summary>
+    /// <param name="methodDef"></param>
+    /// <returns></returns>
+    public static bool IsGeneric(MethodDef methodDef)
+    {
+        if (methodDef.HasGenericParameters)
+            return true;
+
+        var type = methodDef.DeclaringType;
+        while(type != null)
+        {
+            if (type.HasGenericParameters)
+                return true;
+            type = type.DeclaringType;
+        }
+        return false;
     }
 
     /// <summary>

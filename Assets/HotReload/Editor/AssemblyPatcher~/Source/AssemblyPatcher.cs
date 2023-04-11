@@ -139,10 +139,9 @@ public class AssemblyPatcher
     }
 
     /// <summary>
-    /// 修正被Hook或者被Fix的类型的静态构造函数，将它们改为直接返回的空函数, 否则它们会执行两遍
+    /// 修正被Hook或者被Fix的类型的静态构造函数，将它们改为直接返回, 否则其逻辑会在Patch里再次执行导致逻辑错误
     /// </summary>
     /// <param name="constructors"></param>
-    /// <remarks>新增类的静态构造函数由于是第一次执行，因此不能清空函数体，只能修正</remarks>
     void StaticConstructorsQuickReturn(List<MethodDef> constructors)
     {
         foreach (var ctor in constructors)
@@ -166,7 +165,7 @@ public class AssemblyPatcher
 
         var opt = new ModuleWriterOptions(assemblyDataForPatch.patchDllData.moduleDef) { WritePdb = true };
         assemblyDataForPatch.patchDllData.moduleDef.Write(fixPath, opt);
-
+        return;
         // 重命名 dll 名字
         assemblyDataForPatch.patchDllData.Unload();
         File.Delete(patchPath);

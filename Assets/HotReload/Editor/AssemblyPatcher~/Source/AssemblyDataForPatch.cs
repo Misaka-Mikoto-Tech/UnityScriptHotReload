@@ -36,6 +36,10 @@ public class AssemblyDataForPatch
     /// </summary>
     public Dictionary<string, TypeData>                 addedTypes = new Dictionary<string, TypeData>();
     /// <summary>
+    /// 需要Hook的BaseDll方法，判断标准是需要同时在 PatchDll 和 BaseDll 中存在
+    /// </summary>
+    public List<MethodData>                             methodsNeedHook = new List<MethodData>();
+    /// <summary>
     /// PatchDll中源文件与method的映射
     /// </summary>
     public Dictionary<PdbDocument, List<MethodData>>    doc2methodsOfPatch = new Dictionary<PdbDocument, List<MethodData>>();
@@ -86,6 +90,14 @@ public class AssemblyDataForPatch
 
                 lst.Add(methodData);
             }
+        }
+
+        // 收集需要hook的方法
+        methodsNeedHook.Clear();
+        foreach(var (mName, mData) in patchDllData.allMethods)
+        {
+            if (baseDllData.allMethods.TryGetValue(mName, out var baseData))
+                methodsNeedHook.Add(baseData);
         }
         
         isValid = CheckTypesLayout();

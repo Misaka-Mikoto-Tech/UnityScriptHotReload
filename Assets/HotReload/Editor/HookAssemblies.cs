@@ -32,11 +32,11 @@ namespace ScriptHotReload
         {
             foreach(var kv in methodsToHook)
             {
-                string assName = kv.Key;
+                string assName = Path.GetFileNameWithoutExtension(kv.Key);
                 var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
                 HookPool.UninstallByTag(hookTag);
 
-                string patchAssPath = string.Format(kPatchDllPathFormat, HotReloadExecutor.patchNo);
+                string patchAssPath = string.Format(kPatchDllPathFormat, assName, HotReloadExecutor.patchNo);
                 Assembly patchAssembly = Assembly.LoadFrom(patchAssPath);
                 if(patchAssembly == null)
                 {
@@ -46,6 +46,7 @@ namespace ScriptHotReload
 
                 foreach(var method in kv.Value)
                 {
+                    Debug.LogFormat("Try Hook Method:{0}", method.Name);
                     MethodBase miTarget = method;
                     if (miTarget.ContainsGenericParameters) // 泛型暂时不处理
                         continue;
@@ -53,7 +54,7 @@ namespace ScriptHotReload
                     MethodBase miReplace = GetMethodFromAssembly(miTarget, patchAssembly);
                     if(miReplace == null)
                     {
-                        Debug.LogError($"can not find method `{miTarget}` in [{assName}]");
+                        Debug.LogError($"can not find method `{miTarget}` in [{assName}.dll]");
                         continue;
                     }
                     try
@@ -66,6 +67,16 @@ namespace ScriptHotReload
                         throw;
                     }
                 }
+            }
+        }
+
+        public static void UnHook(Dictionary<string, List<MethodBase>> methodsToHook)
+        {
+            foreach (var kv in methodsToHook)
+            {
+                string assName = kv.Key;
+                var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
+                HookPool.UninstallByTag(hookTag);
             }
         }
     }

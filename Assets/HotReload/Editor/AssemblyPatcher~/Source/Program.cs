@@ -1,6 +1,7 @@
 ﻿using NHibernate.Util;
 using SimpleJSON;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -78,7 +79,7 @@ internal class Program
                 var methodsNeedHook = new Dictionary<string, List<MethodData>>();
                 foreach (var patcher in patchers)
                 {
-                    methodsNeedHook.Add(patcher.moduleName, new List<MethodData>(patcher.assemblyDataForPatch.patchDllData.allMethods.Values));
+                    methodsNeedHook.Add(patcher.moduleName, new List<MethodData>(patcher.assemblyDataForPatch.methodsNeedHook));
                 }
                 GenOutputJsonFile(args[1], methodsNeedHook);
 

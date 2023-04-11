@@ -223,14 +223,12 @@ public class MethodData
 
     public JSONNode ToJsonNode()
     {
-        string moduleName = typeData.definition.Module.Name;
-        
         JSONObject ret = new JSONObject();
-        ret["name"] = definition.Name.String;
+        ret["name"] = definition.Name.String; // TODO 对于泛型需要输出为 FuncA`1 这种格式吗？
         ret["type"] = Utils.GetRuntimeTypeName(typeData.definition.ToTypeSig());
         ret["assembly"] = typeData.definition.Module.Name.ToString();
         ret["isConstructor"] = definition.IsConstructor;
-        ret["isGeneric"] = definition.HasGenericParameters;
+        ret["isGeneric"] = Utils.IsGeneric(definition);
         ret["isPublic"] = definition.IsPublic;
         ret["isStatic"] = definition.IsStatic;
         ret["isLambda"] = isLambda;
