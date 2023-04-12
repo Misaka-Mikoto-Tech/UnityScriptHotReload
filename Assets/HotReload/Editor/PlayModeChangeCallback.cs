@@ -21,7 +21,7 @@ namespace ScriptHotReload
     {
         static PlayModeChangeCallback()
         {
-            EditorApplication.playModeStateChanged += OnPlayModeChange;
+            //EditorApplication.playModeStateChanged += OnPlayModeChange;
         }
 
         static void OnPlayModeChange(PlayModeStateChange mode)
@@ -31,8 +31,6 @@ namespace ScriptHotReload
                 case PlayModeStateChange.EnteredPlayMode:
                     {
                         HotReloadUtils.RemoveAllFiles(kTempScriptDir);
-                        if (Directory.Exists(kTempCompileToDir))
-                            Directory.Delete(kTempCompileToDir);
 
                         CompileScript.ResetCompileStatus();
                         string json = EditorPrefs.GetString(kEditorScriptBuildParamsKey);
@@ -49,7 +47,7 @@ namespace ScriptHotReload
                 case PlayModeStateChange.ExitingPlayMode:
                     {
                         CompileScript.ResetCompileStatus();
-                        if (GenPatchAssemblies.codeHasChanged)
+                        if (HotReloadExecutor.patchNo > 0)
                         {
                             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
                             EditorCompilationWrapper.RequestScriptCompilation("运行过程中代码被修改");

@@ -32,11 +32,11 @@ namespace ScriptHotReload
         {
             foreach(var kv in methodsToHook)
             {
-                string assName = kv.Key;
+                string assName = Path.GetFileNameWithoutExtension(kv.Key);
                 var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
                 HookPool.UninstallByTag(hookTag);
 
-                string patchAssPath = string.Format(kPatchDllPathFormat, Path.GetFileNameWithoutExtension(assName), GenPatchAssemblies.patchNo);
+                string patchAssPath = string.Format(kPatchDllPathFormat, assName, HotReloadExecutor.patchNo);
                 Assembly patchAssembly = Assembly.LoadFrom(patchAssPath);
                 if(patchAssembly == null)
                 {
@@ -53,11 +53,29 @@ namespace ScriptHotReload
                     MethodBase miReplace = GetMethodFromAssembly(miTarget, patchAssembly);
                     if(miReplace == null)
                     {
-                        Debug.LogError($"can not find method `{miTarget}` in [{assName}]");
+                        Debug.LogError($"can not find method `{miTarget}` in [{assName}.dll]");
                         continue;
                     }
-                    new MethodHook(miTarget, miReplace, null, hookTag).Install();
+                    try
+                    {
+                        new MethodHook(miTarget, miReplace, null, hookTag).Install();
+                    }
+                    catch(Exception ex)
+                    {
+                        Debug.Log(ex.Message);
+                        throw;
+                    }
                 }
+            }
+        }
+
+        public static void UnHook(Dictionary<string, List<MethodBase>> methodsToHook)
+        {
+            foreach (var kv in methodsToHook)
+            {
+                string assName = kv.Key;
+                var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
+                HookPool.UninstallByTag(hookTag);
             }
         }
     }

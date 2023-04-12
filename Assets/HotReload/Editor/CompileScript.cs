@@ -70,7 +70,7 @@ namespace ScriptHotReload
         }
 
 
-        [DidReloadScripts]
+        //[DidReloadScripts]
         static void Init()
         {
             {// install hook

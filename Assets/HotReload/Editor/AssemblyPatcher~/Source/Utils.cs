@@ -9,9 +9,10 @@ using System.IO;
 using System.Security.Cryptography;
 using System;
 using System.Reflection;
-using Mono.Cecil;
-using Mono.Cecil.Cil;
 using System.Linq;
+using dnlib;
+using dnlib.DotNet;
+using dnlib.DotNet.Pdb;
 
 namespace AssemblyPatcher;
 
@@ -56,7 +57,7 @@ public static class Utils
             File.Delete(file);
     }
 
-    public static BindingFlags BuildBindingFlags(MethodDefinition definition)
+    public static BindingFlags BuildBindingFlags(MethodDef definition)
     {
         BindingFlags flags = BindingFlags.Default;
         if (definition.IsPublic)
@@ -95,20 +96,22 @@ public static class Utils
     /// <param name="definition"></param>
     /// <returns></returns>
     /// <remarks>TODO 优化性能</remarks>
-    public static MethodBase GetMethodInfoSlow(Type t, MethodDefinition definition)
+    public static MethodBase GetReflectMethodSlow(Type t, MethodDef definition)
     {
         var flags = BuildBindingFlags(definition);
         bool isConstructor = definition.IsConstructor;
         MethodBase[] mis = isConstructor ? (MethodBase[])t.GetConstructors(flags) : t.GetMethods(flags);
 
-        ParameterDefinition[] defParaArr = definition.Parameters.ToArray();
+        // dnLib 会把 this 作为第一个参数
+        Parameter[] defParaArr = definition.IsStatic ? definition.Parameters.ToArray() : definition.Parameters.Skip(1).ToArray();
+
         foreach(var mi in mis)
         {
             if (!isConstructor)
             {
                 if (mi.Name != definition.Name)
                     continue;
-                if (GetCecilTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
+                if (GetDnLibTypeName((mi as MethodInfo).ReturnType) != definition.ReturnType.FullName)
                     continue;
             }
             else if (mi.IsStatic != definition.IsStatic)
@@ -123,7 +126,7 @@ public static class Utils
                     var defPara = defParaArr[i];
                     var pi = piArr[i];
 
-                    if (GetCecilTypeName(pi.ParameterType) != defPara.ParameterType.FullName)
+                    if (GetDnLibTypeName(pi.ParameterType) != defPara.Type.FullName)
                     {
                         found = false;
                         break;
@@ -162,31 +165,30 @@ public static class Utils
         return null;
     }
 
-    public static bool IsLambdaStaticType(TypeReference typeReference)
+    public static bool IsLambdaStaticType(TypeDef typeDef)
     {
-        return typeReference.ToString().EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
+        return typeDef.ToString().EndsWith(GlobalConfig.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
     public static bool IsLambdaStaticType(string typeSignature)
     {
-        return typeSignature.EndsWith(InputArgs.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
+        return typeSignature.EndsWith(GlobalConfig.Instance.lambdaWrapperBackend, StringComparison.Ordinal);
     }
 
-    public static bool IsLambdaMethod(MethodReference methodReference)
+    public static bool IsLambdaMethod(MethodDef methodDef)
     {
-        return methodReference.Name.StartsWith("<");
+        return methodDef.Name.StartsWith("<");
     }
 
-    public static Document GetDocOfMethod(MethodDefinition definition)
+    public static PdbDocument GetDocOfMethod(MethodDef methodDef)
     {
-        var seqs = definition?.DebugInformation?.SequencePoints;
-        if (seqs.Count > 0)
-            return seqs[0].Document;
-        else
+        if (!methodDef.HasBody || !methodDef.Body.HasInstructions)
             return null;
+
+        return methodDef.Body.Instructions[0].SequencePoint?.Document; // 编译器自动生成的指令没有 SequencePoint
     }
 
-    private static string GetCecilTypeName(Type t)
+    private static string GetDnLibTypeName(Type t)
     {
         if (t.ContainsGenericParameters)
         {
@@ -208,28 +210,70 @@ public static class Utils
     }
 
 
-    static string s_corlibLibName = typeof(int).Assembly.FullName;
+    static string s_corlibLibName = null;
+    static string s_corlibLibSig = null;
     static string s_systemLibName = typeof(System.Uri).Assembly.FullName;
     static string s_systemXmlLibName = typeof(System.Xml.XmlText).Assembly.FullName;
 
-    static string s_corlibLibSig = ", " + s_corlibLibName;
     static string s_systemLibSig = ", " + s_systemLibName;
     static string s_systemXmlLibSig = ", " + s_systemXmlLibName;
     static string s_defaultSig = ", Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
 
-    public static string GetRuntimeTypeName(Type t, bool isGeneric)
+    static void InitCorlibSigs(TypeSig typeDef)
     {
-        if (isGeneric)
-            return t.ToString();
+        if(s_corlibLibName == null)
+        {
+            s_corlibLibName = typeDef.Module.CorLibTypes.Void.DefinitionAssembly.FullName;
+            s_corlibLibSig = ", " + s_corlibLibName;
+        }
+    }
 
-        string fullName = t.FullName;
-        bool isCorlib = t.Assembly.FullName.Contains(s_corlibLibName);
+    public static string GetRuntimeTypeName(TypeSig typeDef)
+    {
+        InitCorlibSigs(typeDef);
 
-        // 此处不能使用原始 dll 名称，因为 .net core 和 .net framework 的同名类型的定义位于不同的dll中
-        // 且 mscorlib.dll 中的类型可以不写明dll名称
+        string fullName = typeDef.ReflectionFullName;
+
+        if (typeDef.Module == null) // T,U,V 之类的泛型参数
+            return fullName;
+
         fullName = fullName.Replace(s_corlibLibSig, "").Replace(s_systemLibSig, "System").Replace(s_systemXmlLibSig, "System.Xml").Replace(s_defaultSig, "");
-        if (!isCorlib)
-            fullName += ", " + t.Assembly.GetName().Name;
+
+        if (!typeDef.DefinitionAssembly.IsCorLib())
+            fullName += ", " + typeDef.DefinitionAssembly.Name;
+
         return fullName;
+    }
+
+    /// <summary>
+    /// 递归检查一个方法中是否有泛型参数
+    /// </summary>
+    /// <param name="methodDef"></param>
+    /// <returns></returns>
+    public static bool IsGeneric(MethodDef methodDef)
+    {
+        if (methodDef.HasGenericParameters)
+            return true;
+
+        var type = methodDef.DeclaringType;
+        while(type != null)
+        {
+            if (type.HasGenericParameters)
+                return true;
+            type = type.DeclaringType;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 获取原始dll对应的patch dll名称（无扩展名）
+    /// </summary>
+    /// <param name="baseDllName"></param>
+    /// <returns></returns>
+    public static string GetPatchDllName(string baseDllName)
+    {
+        string ret = string.Format(GlobalConfig.Instance.patchDllPathFormat, Path.GetFileNameWithoutExtension(baseDllName), GlobalConfig.Instance.patchNo);
+        ret = Path.GetFileNameWithoutExtension(ret);
+        return ret;
     }
 }
