@@ -27,12 +27,12 @@ namespace ScriptHotReload
         static ConcurrentQueue<string> _patchTaskOutput = new ConcurrentQueue<string>();
         static Dictionary<string, List<MethodBase>> _methodsToHook = new Dictionary<string, List<MethodBase>>(); // <AssemblyName, List>
 
-        [MenuItem("Tools/Test")]
-        static void Test()
-        {
-            var assPatch = Assembly.LoadFrom(@"G:\Project\UnityScriptHotReload\Temp\ScriptHotReload\TestDllA_Patch_0.dll");
-            UnityEngine.Debug.Log(assPatch != null);
-        }
+        //[MenuItem("Tools/Test")]
+        //static void Test()
+        //{
+        //    var assPatch = Assembly.LoadFrom(@"G:\Project\UnityScriptHotReload\Temp\ScriptHotReload\TestDllA_Patch_0.dll");
+        //    UnityEngine.Debug.Log(assPatch != null);
+        //}
 
         static HotReloadExecutor()
         {

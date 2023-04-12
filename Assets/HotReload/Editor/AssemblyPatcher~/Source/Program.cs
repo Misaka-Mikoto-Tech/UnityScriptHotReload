@@ -1,7 +1,5 @@
-﻿using NHibernate.Util;
-using SimpleJSON;
+﻿using SimpleJSON;
 using System.Diagnostics;
-using System.Reflection;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -111,7 +109,11 @@ internal class Program
     {
         /*
          * {
-         *   "modifiedMethods":[
+         *   "patchNo" : 0,
+         *   "assemblyChangedFromLast" : [
+         *   "TestDllA"
+         *   ],
+         *   "methodsNeedHook":[
          *       {"name":"FuncA", "type":"", "isConstructor": true ...},
          *       {"name":"FuncB", "type":"", "isConstructor": false ...},
          *       ...

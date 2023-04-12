@@ -158,20 +158,20 @@ public class AssemblyPatcher
     public void WriteToFile()
     {
         string patchPath = assemblyDataForPatch.patchDllData.moduleDef.Location;
-        string fixPath = $"{Path.GetDirectoryName(patchPath)}/{Path.GetFileNameWithoutExtension(patchPath)}_fix.dll";
         string patchPdbPath = Path.ChangeExtension(patchPath, ".pdb");
-        string fixPdbPath = Path.ChangeExtension(fixPath, ".pdb");
 
+        string tmpPath = $"{Path.GetDirectoryName(patchPath)}/tmp_{new Random().Next(100)}.dll";
+        string tmpPdbPath = Path.ChangeExtension(tmpPath, ".pdb");
 
         var opt = new ModuleWriterOptions(assemblyDataForPatch.patchDllData.moduleDef) { WritePdb = true };
-        assemblyDataForPatch.patchDllData.moduleDef.Write(fixPath, opt);
-        return;
+        assemblyDataForPatch.patchDllData.moduleDef.Write(tmpPath, opt);
+
         // 重命名 dll 名字
         assemblyDataForPatch.patchDllData.Unload();
         File.Delete(patchPath);
         File.Delete(patchPdbPath);
-        File.Move(fixPath, patchPath);
-        File.Move(fixPdbPath, patchPdbPath);
+        File.Move(tmpPath, patchPath);
+        File.Move(tmpPdbPath, patchPdbPath);
     }
 }
 

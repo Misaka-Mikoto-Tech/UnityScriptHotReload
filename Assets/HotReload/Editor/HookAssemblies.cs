@@ -46,7 +46,6 @@ namespace ScriptHotReload
 
                 foreach(var method in kv.Value)
                 {
-                    Debug.LogFormat("Try Hook Method:{0}", method.Name);
                     MethodBase miTarget = method;
                     if (miTarget.ContainsGenericParameters) // 泛型暂时不处理
                         continue;

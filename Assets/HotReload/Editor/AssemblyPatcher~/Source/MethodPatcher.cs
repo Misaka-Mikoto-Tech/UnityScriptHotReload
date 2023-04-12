@@ -5,28 +5,17 @@ using System.Text;
 using System.Threading.Tasks;
 using dnlib;
 using dnlib.DotNet;
-using dnlib.DotNet.Pdb;
-
-using static AssemblyPatcher.Utils;
-using System.Security.Permissions;
-using SecurityAction = System.Security.Permissions.SecurityAction;
-using NHibernate.Mapping;
-using System.Runtime.CompilerServices;
 using dnlib.DotNet.Emit;
-using TypeDef = dnlib.DotNet.TypeDef;
-using System.Text.RegularExpressions;
 
 namespace AssemblyPatcher;
 
 public class MethodPatcher
 {
     AssemblyDataForPatch _assemblyDataForPatch;
-    MemberFinder        _baseDllFinder;
     Importer            _importer;
     public MethodPatcher(AssemblyDataForPatch assemblyData)
     {
         _assemblyDataForPatch = assemblyData;
-        _baseDllFinder = new MemberFinder().FindAll(assemblyData.baseDllData.moduleDef);
         _importer = new Importer(assemblyData.patchDllData.moduleDef);
     }
 
@@ -183,7 +172,7 @@ public class MethodPatcher
                 return cache;
         }
 
-        IMethodDefOrRef ret = methodDefOrRef;
+        IMethodDefOrRef ret;
         do
         {
             // 如果类型定义可以在原始dll内找到，那么直接返回原始dll内对应的方法定义(可以是非泛型方法或者泛型方法的泛型定义)
@@ -245,26 +234,20 @@ public class MethodPatcher
         }
 
         // 获取当前方法所在类型在 base dll 内对应的类型(有可能也是泛型实例[var])
-        var baseType = GetBaseTypeOrRef(methodSpec.DeclaringType);
+        var baseType = GetBaseTypeOrRef(methodSpec.DeclaringType); // NS_Test.TestClsG`1<System.Single>
 
         // 构建当前方法的泛型参数实例(varM)
         var gArgs = methodSpec.GenericInstMethodSig.GenericArguments;
         TypeSig[] baseTypeSigs = new TypeSig[gArgs.Count];
         for(int i = 0, imax = baseTypeSigs.Length; i < imax; i++)
         {
-            baseTypeSigs[i] = GetBaseTypeSig(gArgs[i]);
+            baseTypeSigs[i] = GetBaseTypeSig(gArgs[i]); // baseTypeSigs[0] = System.Boolean
         }
 
         GenericInstMethodSig gimg = new GenericInstMethodSig(baseTypeSigs);
 
         // 生成泛型方法引用
-        /*
-         * From: System.Single NS_Test.TestClsG`1<System.Single>::ShowGA<System.Boolean>(System.Single,System.Boolean)
-         * To:   T NS_Test.TestClsG`1::ShowGA<U>(T,U)
-         */
-        var genericMethodDef = methodSpec.ResolveMethodDef();
-        // T <!!0>(T,U)
-        var genericMethodSig = genericMethodDef.Signature as MethodSig;
+        var genericMethodSig = methodSpec.Method.MethodSig; // T <!!0>(T,U)
         // System.Single NS_Test.TestClsG`1<System.Single>::ShowGA<!!0>(System.Single,U)
         var baseGenericMethodRef = new MemberRefUser(_assemblyDataForPatch.baseDllData.moduleDef, methodSpec.Name, genericMethodSig, baseType);
 
