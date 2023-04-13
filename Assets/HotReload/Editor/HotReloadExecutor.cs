@@ -11,7 +11,6 @@ using System.Collections.Concurrent;
 using System.Reflection;
 
 using static ScriptHotReload.HotReloadUtils;
-using static ScriptHotReload.HotReloadConfig;
 using System.Text;
 
 namespace ScriptHotReload
@@ -19,6 +18,8 @@ namespace ScriptHotReload
     [InitializeOnLoad]
     public class HotReloadExecutor
     {
+        const string kMenue_HotReload = "Tools/HotReload/是否自动重载";
+
         public static int patchNo { get; private set; } = 0;
         static string _dotnetPath;
         static string _cscPath;
@@ -27,12 +28,56 @@ namespace ScriptHotReload
         static ConcurrentQueue<string> _patchTaskOutput = new ConcurrentQueue<string>();
         static Dictionary<string, List<MethodBase>> _methodsToHook = new Dictionary<string, List<MethodBase>>(); // <AssemblyName, List>
 
-        //[MenuItem("Tools/Test")]
-        //static void Test()
-        //{
-        //    var assPatch = Assembly.LoadFrom(@"G:\Project\UnityScriptHotReload\Temp\ScriptHotReload\TestDllA_Patch_0.dll");
-        //    UnityEngine.Debug.Log(assPatch != null);
-        //}
+        /// <summary>
+        /// 是否是自动重载模式
+        /// </summary>
+        public static bool autoReloadMode
+        {
+            get
+            {
+                return EditorPrefs.GetBool(kMenue_HotReload, false);
+            }
+            private set
+            {
+                EditorPrefs.SetBool(kMenue_HotReload, value);
+            }
+        }
+
+        #region 菜单功能
+        /// <summary>
+        /// 重载事件是否已触发（auto模式下将始终触发）
+        /// </summary>
+        static bool reloadEventFired;
+
+        [MenuItem("Tools/HotReload/立即重载 (Play时有效) #R")]
+        static void Menu_ManualReload()
+        {
+            reloadEventFired = true;
+        }
+
+        /// <summary>
+        /// 切换 [自动重载] 菜单函数
+        /// </summary>
+        [MenuItem(kMenue_HotReload, false)] // "Tools/HotReload/是否自动重载"
+        static void Menue_SwapAutoReloadMode()
+        {
+            bool isChecked = Menu.GetChecked(kMenue_HotReload);
+            isChecked = !isChecked;
+
+            autoReloadMode = isChecked;
+            Menu.SetChecked(kMenue_HotReload, isChecked);
+
+            // 切换到自动模式时主动设置触发初始值为true, 反之手动模式初始不触发
+            reloadEventFired = isChecked;
+        }
+
+        [MenuItem(kMenue_HotReload, true)]
+        static bool Menue_AutoReloadMode_Check()
+        {
+            Menu.SetChecked(kMenue_HotReload, autoReloadMode);
+            return true;
+        }
+        #endregion
 
         static HotReloadExecutor()
         {
@@ -55,7 +100,9 @@ namespace ScriptHotReload
 
         private static void OnEditorUpdate()
         {
-            if (!hotReloadEnabled) return;
+            if (!(HotReloadConfig.hotReloadEnabled && Application.isPlaying))
+                return;
+
             if (_patchTask != null)
             {
                 DispatchTaskOutput();
@@ -86,9 +133,29 @@ namespace ScriptHotReload
                 return;
             }
 
-            if (!FileWatcher.changedSinceLastGet
-                || new TimeSpan(DateTime.Now.Ticks - FileWatcher.lastModifyTime.Ticks).TotalSeconds < kFileChangeCheckSpan)
-                return;
+            if(autoReloadMode)
+            {
+                if (!FileWatcher.changedSinceLastGet
+                || new TimeSpan(DateTime.Now.Ticks - FileWatcher.lastModifyTime.Ticks).TotalSeconds < HotReloadConfig.kFileChangeCheckSpan)
+                    return;
+            }
+            else
+            {
+                try
+                {
+                    if (!reloadEventFired)
+                        return;
+                    else if (!FileWatcher.changedSinceLastGet)
+                    {
+                        UnityEngine.Debug.LogWarning("没有文件发生改变，不执行热重载");
+                        return;
+                    }
+                }
+                finally
+                {
+                    reloadEventFired = false;
+                }
+            }
 
             GenPatcherInputArgsFile();
             _patchTask = Task.Run(RunAssemblyPatchProcess);
@@ -120,10 +187,10 @@ namespace ScriptHotReload
             inputArgs.dotnetPath = _dotnetPath;
             inputArgs.cscPath = _cscPath;
             
-            inputArgs.tempScriptDir = kTempScriptDir;
-            inputArgs.builtinAssembliesDir = kBuiltinAssembliesDir;
-            inputArgs.patchDllPathFormat = kPatchDllPathFormat;
-            inputArgs.lambdaWrapperBackend = kLambdaWrapperBackend;
+            inputArgs.tempScriptDir = HotReloadConfig.kTempScriptDir;
+            inputArgs.builtinAssembliesDir = HotReloadConfig.kBuiltinAssembliesDir;
+            inputArgs.patchDllPathFormat = HotReloadConfig.kPatchDllPathFormat;
+            inputArgs.lambdaWrapperBackend = HotReloadConfig.kLambdaWrapperBackend;
 
             inputArgs.filesChanged = FileWatcher.GetChangedFile();
 
@@ -131,7 +198,7 @@ namespace ScriptHotReload
             inputArgs.allAssemblyPathes = GetAllAssemblyPaths();
 
             string jsonStr = JsonUtility.ToJson(inputArgs, true);
-            File.WriteAllText(kAssemblyPatcherInput, jsonStr, Encoding.UTF8);
+            File.WriteAllText(HotReloadConfig.kAssemblyPatcherInput, jsonStr, Encoding.UTF8);
         }
 
         private static int RunAssemblyPatchProcess()
@@ -142,7 +209,7 @@ namespace ScriptHotReload
             startInfo.Arguments = $"{kAssemblyPatcherInput} {kAssemblyPatcherOutput} debug";
             startInfo.CreateNoWindow = false;
 #else
-            startInfo.Arguments = $"{kAssemblyPatcherInput} {kAssemblyPatcherOutput}";
+            startInfo.Arguments = $"{HotReloadConfig.kAssemblyPatcherInput} {HotReloadConfig.kAssemblyPatcherOutput}";
             startInfo.CreateNoWindow = true;
 #endif
             startInfo.UseShellExecute = false;
@@ -237,10 +304,10 @@ namespace ScriptHotReload
         {
             _methodsToHook.Clear();
 
-            if (!File.Exists(kAssemblyPatcherOutput))
-                throw new Exception($"can not find output report file `{kAssemblyPatcherOutput}`");
+            if (!File.Exists(HotReloadConfig.kAssemblyPatcherOutput))
+                throw new Exception($"can not find output report file `{HotReloadConfig.kAssemblyPatcherOutput}`");
 
-            string text = File.ReadAllText(kAssemblyPatcherOutput);
+            string text = File.ReadAllText(HotReloadConfig.kAssemblyPatcherOutput);
             var outputReport = JsonUtility.FromJson<OutputReport>(text);
 
             foreach (var data in outputReport.methodsNeedHook)
