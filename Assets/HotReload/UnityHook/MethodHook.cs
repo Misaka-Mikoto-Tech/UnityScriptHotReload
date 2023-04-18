@@ -195,12 +195,12 @@ namespace MonoHook
             int minMethodBodySize = 10;
 
             {
-                if ((targetMethod.MethodImplementationFlags & MethodImplAttributes.InternalCall) != MethodImplAttributes.InternalCall)
-                {
-                    int codeSize = targetMethod.GetMethodBody().GetILAsByteArray().Length; // GetMethodBody can not call on il2cpp
-                    if (codeSize < minMethodBodySize)
-                        UnityEngine.Debug.LogWarning($"WRANING: you can not hook method [{methodName}], cause its method body is too short({codeSize}), will random crash on IL2CPP release mode");
-                }
+                //if ((targetMethod.MethodImplementationFlags & MethodImplAttributes.InternalCall) != MethodImplAttributes.InternalCall)
+                //{
+                //    int codeSize = targetMethod.GetMethodBody().GetILAsByteArray().Length; // GetMethodBody can not call on il2cpp
+                //    if (codeSize < minMethodBodySize)
+                //        UnityEngine.Debug.LogWarning($"WRANING: you can not hook method [{methodName}], cause its method body is too short({codeSize}), will random crash on IL2CPP release mode");
+                //}
             }
 
             if(proxyMethod != null)

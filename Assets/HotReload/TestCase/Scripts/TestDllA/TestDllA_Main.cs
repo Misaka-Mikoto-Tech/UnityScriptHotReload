@@ -1,4 +1,4 @@
-﻿#define APPLY_PATCH
+﻿//#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -27,9 +27,17 @@ namespace NS_Test
 
         public int x;
         public bool y;
+
+        public TestStruct2(int val)
+        {
+            propA = "private propA value set in constructor";
+            evtA = null;
+            x = val;
+            y = true;
+        }
     }
 
-#if APPLY_PATCH || true
+#if APPLY_PATCH
     public class NewTestClass
     {
         public List<List<TestStruct[]>> lst1 = new List<List<TestStruct[]>>();
@@ -53,9 +61,10 @@ namespace NS_Test
             TestStruct testStruct = new TestStruct();
             testStruct.x = 3;
 
-            TestStruct2 testStruct2 = new TestStruct2();
+            TestStruct2 testStruct2 = new TestStruct2(789);
             testStruct2.evtA += x => { };
-            Debug.Log(testStruct2.propA.GetType().Name);
+            string propA = testStruct2.propA;
+            Debug.Log(propA.GetType().Name);
 
             Debug.Log(typeof(TestStruct2).GetProperty("propA").IsSpecialName);
 
