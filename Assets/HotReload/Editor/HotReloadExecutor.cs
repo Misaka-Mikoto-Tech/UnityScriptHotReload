@@ -81,6 +81,9 @@ namespace ScriptHotReload
 
         static HotReloadExecutor()
         {
+            if (!HotReloadConfig.hotReloadEnabled)
+                return;
+
             patchNo = 0;
 
             string dotnetName = "dotnet";
@@ -95,7 +98,34 @@ namespace ScriptHotReload
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_dotnetPath));
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_cscPath));
 
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             EditorApplication.update += OnEditorUpdate;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange mode)
+        {
+            switch (mode)
+            {
+                case PlayModeStateChange.EnteredPlayMode:
+                    // 进入播放模式后，首先删除所有之前残留的patch文件
+                    foreach(string file in Directory.GetFiles(HotReloadConfig.kTempScriptDir))
+                    {
+                        if (file.EndsWith(".dll") || file.EndsWith(".pdb"))
+                        {
+                            try
+                            {
+                                File.Delete(file);
+                            }
+                            catch(Exception ex)
+                            {
+                                UnityEngine.Debug.LogError($"delete patch file fail:{ex.Message}");
+                            }
+                        }
+                            
+                    }
+                    break;
+                default: break;
+            }
         }
 
         private static void OnEditorUpdate()

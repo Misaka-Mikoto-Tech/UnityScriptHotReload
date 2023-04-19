@@ -5,8 +5,6 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-using static ScriptHotReload.HotReloadConfig;
-
 namespace ScriptHotReload
 {
     /// <summary>
@@ -37,7 +35,7 @@ namespace ScriptHotReload
 
         static FileWatcher()
         {
-            if(hotReloadEnabled)
+            if(HotReloadConfig.hotReloadEnabled)
                 EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
