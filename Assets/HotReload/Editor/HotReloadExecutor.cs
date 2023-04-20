@@ -1,4 +1,6 @@
-﻿using System.Collections;
+﻿//#define PATCHER_DEBUG
+
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -236,7 +238,7 @@ namespace ScriptHotReload
             var startInfo = new ProcessStartInfo();
             startInfo.FileName = Path.GetDirectoryName(GetThisFilePath()) + "/AssemblyPatcher~/AssemblyPatcher.exe";
 #if PATCHER_DEBUG
-            startInfo.Arguments = $"{kAssemblyPatcherInput} {kAssemblyPatcherOutput} debug";
+            startInfo.Arguments = $"{HotReloadConfig.kAssemblyPatcherInput} {HotReloadConfig.kAssemblyPatcherOutput} debug";
             startInfo.CreateNoWindow = false;
 #else
             startInfo.Arguments = $"{HotReloadConfig.kAssemblyPatcherInput} {HotReloadConfig.kAssemblyPatcherOutput}";
