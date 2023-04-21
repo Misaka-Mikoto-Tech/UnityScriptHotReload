@@ -168,7 +168,7 @@ namespace ScriptHotReload
             if(autoReloadMode)
             {
                 if (!FileWatcher.changedSinceLastGet
-                || new TimeSpan(DateTime.Now.Ticks - FileWatcher.lastModifyTime.Ticks).TotalSeconds < HotReloadConfig.kFileChangeCheckSpan)
+                || new TimeSpan(DateTime.Now.Ticks - FileWatcher.lastModifyTime.Ticks).TotalSeconds < HotReloadConfig.kAutoReloadPatchCheckSpan)
                     return;
             }
             else
@@ -281,7 +281,7 @@ namespace ScriptHotReload
                 }
                 catch(Exception ex)
                 {
-                    _patchTaskOutput.Enqueue("[Error][ParseOutput] " + ex.Message);
+                    _patchTaskOutput.Enqueue($"[Error][ParseOutput] {ex.Message}\r\n{ex.StackTrace}");
                     exitCode = -2;
                 }
             }
@@ -327,6 +327,11 @@ namespace ScriptHotReload
                 public string document;
                 public string returnType;
                 public string[] paramTypes;
+
+                public override string ToString()
+                {
+                    return name;
+                }
             }
             public int patchNo;
             public List<MethodData> methodsNeedHook;
@@ -334,6 +339,8 @@ namespace ScriptHotReload
 
         static void ParseOutputReport()
         {
+            // 不管 pathcer 的输出了，直接遍历 pathcer.dll 内的函数，一把梭，简单暴力但有效
+            return;
             _methodsToHook.Clear();
 
             if (!File.Exists(HotReloadConfig.kAssemblyPatcherOutput))
@@ -344,29 +351,10 @@ namespace ScriptHotReload
 
             foreach (var data in outputReport.methodsNeedHook)
             {
-                if (data.isGeneric) // 泛型方法暂时不处理
-                    continue;
-
                 if (data.isStatic && data.isConstructor) // .cctor
                     continue;
 
-                Type t = Type.GetType(data.type, true);
-
-                BindingFlags flags = BindingFlags.Default;
-                flags |= data.isPublic ? BindingFlags.Public : BindingFlags.NonPublic;
-                flags |= data.isStatic ? BindingFlags.Static : BindingFlags.Instance;
-
-                Type[] paramTypes = new Type[data.paramTypes.Length];
-                for (int i = 0, imax = paramTypes.Length; i < imax; i++)
-                {
-                    paramTypes[i] = Type.GetType(data.paramTypes[i], true);
-                }
-                MethodBase method;
-                if (data.isConstructor)
-                    method = t.GetConstructor(flags, null, paramTypes, null);
-                else
-                    method = t.GetMethod(data.name, flags, null, paramTypes, null);
-
+                MethodBase method = ParseMethod(data);
                 if (method == null)
                     throw new Exception($"can not find method `{data.name}`");
 
@@ -379,6 +367,63 @@ namespace ScriptHotReload
                 lst.Add(method);
             }
         }
+
+        static MethodBase ParseMethod(OutputReport.MethodData methodData)
+        {
+            Type t = Type.GetType(methodData.type, true); // ParseType(methodData.type);
+
+            BindingFlags flags = BindingFlags.Default;
+            flags |= methodData.isPublic ? BindingFlags.Public : BindingFlags.NonPublic;
+            flags |= methodData.isStatic ? BindingFlags.Static : BindingFlags.Instance;
+
+            MethodBase[] mis = methodData.isConstructor ? t.GetConstructors(flags) : t.GetMethods(flags);
+            foreach(var mi in mis)
+            {
+                if (mi.Name != methodData.name)
+                    continue;
+
+                bool isValid = true;
+                var pis = mi.GetParameters();
+                for(int i = 0, imax = pis.Length; i < imax; i++)
+                {
+                    var pi = pis[i];
+                    string typeName = pi.ParameterType.IsGenericParameter ? pi.ParameterType.Name : pi.ParameterType.FullName;
+                    if(typeName == null)
+                    {
+
+                    }
+                    if (!typeName.StartsWith("System."))
+                        typeName += $", {pi.ParameterType.Assembly.GetName().Name}";
+
+                    if (typeName != methodData.paramTypes[i])
+                    {
+                        isValid = false;
+                        break;
+                    }
+                }
+                if (isValid)
+                    return mi;
+            }
+            return null;
+        }
+
+        static Type ParseType(string typeName)
+        {
+            Type ret = Type.GetType(typeName, true);
+
+            if (ret.ContainsGenericParameters)
+            {
+                // 我们目标只hook引用类型，值类型每个类型都有不同内存地址，遍历所有类型不划算
+                Type[] args = ret.GetGenericArguments();
+                for (int i = 0, imax = args.Length; i < imax; i++)
+                    args[i] = typeof(object);
+
+                ret = ret.MakeGenericType(args);
+            }
+
+            return ret;
+        }
+
     }
 
 }

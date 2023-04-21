@@ -16,9 +16,9 @@ namespace ScriptHotReload
         /// </summary>
         public readonly static bool hotReloadEnabled = true;
         /// <summary>
-        /// 文件变化检测间隔
+        /// 自动重载模式下Patch检测时间间隔
         /// </summary>
-        public const float  kFileChangeCheckSpan    = 2.5f;
+        public const float  kAutoReloadPatchCheckSpan    = 2.5f;
         public const string kPatchAssemblyName      = "{0}_Patch_{1}";  // {0}: AssemblyName, {1}: PatchNo
 
         public const string kTempScriptDir          = "Temp/ScriptHotReload";

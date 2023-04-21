@@ -1,4 +1,4 @@
-﻿//#define APPLY_PATCH
+﻿#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -350,8 +350,29 @@ namespace NS_Test
 
         public bool FuncB(int y, T arg1)
         {
+            Debug.Log("FuncB 1");
             Debug.Log(arg1.GetType().FullName);
             return y > 10;
+        }
+
+        public bool FuncB(int y, T arg1, List<int> arg2, List<T> arg3, List<List<TestCls>> arg4, List<Dictionary<int, T>> arg5)
+        {
+            Debug.Log("FuncB 1");
+            Debug.Log(arg1.GetType().FullName);
+            return y > 10;
+        }
+
+        public bool FuncB<U>(int y, T arg1, U arg2)
+        {
+            Debug.Log("FuncB 1");
+            Debug.Log(arg1.GetType().FullName);
+            return y > 10;
+        }
+
+        public bool FuncB(int y, string str) // 泛型方法允许参数列表和返回值类型与非泛型的一致，调用时默认匹配非泛型方法
+        {
+            Debug.Log("FuncB 2");
+            return true;
         }
 
         public string str;
