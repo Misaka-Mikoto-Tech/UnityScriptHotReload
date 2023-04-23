@@ -238,6 +238,7 @@ public static class Utils
             return fullName;
 
         fullName = fullName.Replace(s_corlibLibSig, "").Replace(s_systemLibSig, "System").Replace(s_systemXmlLibSig, "System.Xml").Replace(s_defaultSig, "");
+        fullName = fullName.Replace(", <<<NULL>>>", ""); // List<T> 会输出 "System.Collections.Generic.List`1[[T, <<<NULL>>>]]"
 
         if (!typeDef.DefinitionAssembly.IsCorLib())
             fullName += ", " + typeDef.DefinitionAssembly.Name;
