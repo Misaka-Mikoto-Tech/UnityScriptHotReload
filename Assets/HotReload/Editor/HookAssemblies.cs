@@ -28,6 +28,31 @@ namespace ScriptHotReload
     {
         const string kHotReloadHookTag_Fmt = "kScriptHotReload_{0}";
 
+        public static void DoHook(Assembly original, Assembly patch)
+        {
+            Dictionary<string, Type> dicTypesOri = new Dictionary<string, Type>();
+            Dictionary<string, Type> dicTypesPatch = new Dictionary<string, Type>();
+
+            foreach (var t in original.GetTypes()) // 包含 NestedClass
+                dicTypesOri.Add(t.FullName, t);
+
+            foreach (var t in patch.GetTypes())
+                dicTypesPatch.Add(t.FullName, t);
+
+            Dictionary<MethodBase, MethodBase> methodsToHook = new Dictionary<MethodBase, MethodBase>(); // original, patch
+            foreach(var kv in dicTypesPatch)
+            {
+                Type oriType;
+                if (!dicTypesOri.TryGetValue(kv.Key, out oriType))
+                    continue; // patch中新增的类型
+
+                var ctors = kv.Value.GetConstructors();
+
+                var mis = kv.Value.GetMethods();
+
+            }
+        }
+
         public static void DoHook(Dictionary<string, List<MethodBase>> methodsToHook)
         {
             foreach(var kv in methodsToHook)
@@ -69,12 +94,11 @@ namespace ScriptHotReload
             }
         }
 
-        public static void UnHook(Dictionary<string, List<MethodBase>> methodsToHook)
+        public static void UnHookDlls(List<string> dllNames)
         {
-            foreach (var kv in methodsToHook)
+            foreach (var dll in dllNames)
             {
-                string assName = kv.Key;
-                var hookTag = string.Format(kHotReloadHookTag_Fmt, assName);
+                var hookTag = string.Format(kHotReloadHookTag_Fmt, dll);
                 HookPool.UninstallByTag(hookTag);
             }
         }

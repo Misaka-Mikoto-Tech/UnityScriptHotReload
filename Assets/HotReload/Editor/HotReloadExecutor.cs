@@ -11,9 +11,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Reflection;
-
-using static ScriptHotReload.HotReloadUtils;
 using System.Text;
+using MonoHook;
 
 namespace ScriptHotReload
 {
@@ -23,6 +22,7 @@ namespace ScriptHotReload
         const string kMenue_HotReload = "Tools/HotReload/是否自动重载";
 
         public static int patchNo { get; private set; } = 0;
+        public static List<string> patchDlls { get; private set; } = new List<string>();
         static string _dotnetPath;
         static string _cscPath;
 
@@ -144,7 +144,6 @@ namespace ScriptHotReload
                     {
                         try
                         {
-                            HookAssemblies.DoHook(_methodsToHook);
                             if (_methodsToHook.Count > 0)
                                 patchNo++;
 
@@ -152,7 +151,6 @@ namespace ScriptHotReload
                         }
                         catch(Exception ex)
                         {
-                            HookAssemblies.UnHook(_methodsToHook);
                             UnityEngine.Debug.LogErrorFormat("热重载出错:{0}\r\n{1}", ex.Message, ex.StackTrace);
                         }
                     }
@@ -227,7 +225,15 @@ namespace ScriptHotReload
             inputArgs.filesChanged = FileWatcher.GetChangedFile();
 
             inputArgs.defines = EditorUserBuildSettings.activeScriptCompilationDefines;
-            inputArgs.allAssemblyPathes = GetAllAssemblyPaths();
+            inputArgs.allAssemblyPathes = HotReloadUtils.GetAllAssemblyPaths();
+
+            patchDlls.Clear();
+            foreach (var fileName in inputArgs.filesChanged)
+            {
+                var dllName = fileName.Substring(fileName.LastIndexOf(":") + 1);
+                if (!patchDlls.Contains(dllName))
+                    patchDlls.Add(dllName);
+            }
 
             string jsonStr = JsonUtility.ToJson(inputArgs, true);
             File.WriteAllText(HotReloadConfig.kAssemblyPatcherInput, jsonStr, Encoding.UTF8);
@@ -236,7 +242,7 @@ namespace ScriptHotReload
         private static int RunAssemblyPatchProcess()
         {
             var startInfo = new ProcessStartInfo();
-            startInfo.FileName = Path.GetDirectoryName(GetThisFilePath()) + "/AssemblyPatcher~/AssemblyPatcher.exe";
+            startInfo.FileName = Path.GetDirectoryName(HotReloadUtils.GetThisFilePath()) + "/AssemblyPatcher~/AssemblyPatcher.exe";
 #if PATCHER_DEBUG
             startInfo.Arguments = $"{HotReloadConfig.kAssemblyPatcherInput} {HotReloadConfig.kAssemblyPatcherOutput} debug";
             startInfo.CreateNoWindow = false;
@@ -277,10 +283,24 @@ namespace ScriptHotReload
             {
                 try
                 {
-                    ParseOutputReport();
+                    // patch dll 生成成功后依次对其执行hook
+                    foreach (var dll in patchDlls)
+                    {
+                        string patchDllPath = string.Format(HotReloadConfig.kPatchDllPathFormat, dll, patchNo);
+                        Assembly patchAssembly = Assembly.LoadFrom(patchDllPath);
+                        Assembly oriAssembly = null;
+                        if (!HotReloadUtils.allAssembliesDic.TryGetValue(dll, out oriAssembly))
+                        {
+                            throw new Exception($"can not find assembly with name `{dll}`");
+                        }
+
+                        HookAssemblies.DoHook(oriAssembly, patchAssembly);
+                        exitCode = -1;
+                    }
                 }
                 catch(Exception ex)
                 {
+                    HookAssemblies.UnHookDlls(patchDlls);
                     _patchTaskOutput.Enqueue($"[Error][ParseOutput] {ex.Message}\r\n{ex.StackTrace}");
                     exitCode = -2;
                 }
@@ -335,76 +355,6 @@ namespace ScriptHotReload
             }
             public int patchNo;
             public List<MethodData> methodsNeedHook;
-        }
-
-        static void ParseOutputReport()
-        {
-            // 不管 pathcer 的输出了，直接遍历 pathcer.dll 内的函数，一把梭，简单暴力但有效
-            return;
-            _methodsToHook.Clear();
-
-            if (!File.Exists(HotReloadConfig.kAssemblyPatcherOutput))
-                throw new Exception($"can not find output report file `{HotReloadConfig.kAssemblyPatcherOutput}`");
-
-            string text = File.ReadAllText(HotReloadConfig.kAssemblyPatcherOutput);
-            var outputReport = JsonUtility.FromJson<OutputReport>(text);
-
-            foreach (var data in outputReport.methodsNeedHook)
-            {
-                if (data.isStatic && data.isConstructor) // .cctor
-                    continue;
-
-                MethodBase method = ParseMethod(data);
-                if (method == null)
-                    throw new Exception($"can not find method `{data.name}`");
-
-                List<MethodBase> lst;
-                if(!_methodsToHook.TryGetValue(data.assembly, out lst))
-                {
-                    lst = new List<MethodBase>();
-                    _methodsToHook.Add(data.assembly, lst);
-                }
-                lst.Add(method);
-            }
-        }
-
-        static MethodBase ParseMethod(OutputReport.MethodData methodData)
-        {
-            Type t = Type.GetType(methodData.type, true); // ParseType(methodData.type);
-
-            BindingFlags flags = BindingFlags.Default;
-            flags |= methodData.isPublic ? BindingFlags.Public : BindingFlags.NonPublic;
-            flags |= methodData.isStatic ? BindingFlags.Static : BindingFlags.Instance;
-
-            MethodBase[] mis = methodData.isConstructor ? t.GetConstructors(flags) : t.GetMethods(flags);
-            foreach(var mi in mis)
-            {
-                if (mi.Name != methodData.name)
-                    continue;
-
-                bool isValid = true;
-                var pis = mi.GetParameters();
-                for(int i = 0, imax = pis.Length; i < imax; i++)
-                {
-                    var pi = pis[i];
-                    string typeName = pi.ParameterType.IsGenericParameter ? pi.ParameterType.Name : pi.ParameterType.FullName;
-                    if(typeName == null)
-                    {
-
-                    }
-                    if (!typeName.StartsWith("System."))
-                        typeName += $", {pi.ParameterType.Assembly.GetName().Name}";
-
-                    if (typeName != methodData.paramTypes[i])
-                    {
-                        isValid = false;
-                        break;
-                    }
-                }
-                if (isValid)
-                    return mi;
-            }
-            return null;
         }
 
         static Type ParseType(string typeName)
