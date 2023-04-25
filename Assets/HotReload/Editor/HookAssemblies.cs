@@ -40,20 +40,75 @@ namespace ScriptHotReload
                 dicTypesPatch.Add(t.FullName, t);
 
             Dictionary<MethodBase, MethodBase> methodsToHook = new Dictionary<MethodBase, MethodBase>(); // original, patch
-            foreach(var kv in dicTypesPatch)
+
+            List<MethodBase> methodsOfTypePatch = new List<MethodBase>();
+            List<MethodBase> methodsOfTypeOri = new List<MethodBase>();
+            foreach (var kv in dicTypesPatch)
             {
+                Type patchType = kv.Value;
                 Type oriType;
                 if (!dicTypesOri.TryGetValue(kv.Key, out oriType))
                     continue; // patch中新增的类型
 
-                var ctors = kv.Value.GetConstructors();
+                if(oriType.ContainsGenericParameters)
+                {
+                    Type[] genericArgs = oriType.GetGenericArguments();
+                    for (int i = 0, imax = genericArgs.Length; i < imax; i++) //泛型类型只用 object 类型填充
+                        genericArgs[i] = typeof(object);
+                    oriType = oriType.MakeGenericType(genericArgs);
+                    //patchType = patchType.MakeGenericType(genericArgs);
+                }
 
-                var mis = kv.Value.GetMethods();
+                methodsOfTypeOri.Clear();
+                methodsOfTypePatch.Clear();
 
+                methodsOfTypeOri.AddRange(oriType.GetConstructors());
+                methodsOfTypeOri.AddRange(oriType.GetMethods());
+                methodsOfTypePatch.AddRange(patchType.GetConstructors());
+                methodsOfTypePatch.AddRange(patchType.GetMethods());
+                
+                foreach(var miPatch in methodsOfTypePatch)
+                {
+                    string sig = miPatch.ToString(); // "T TestG[T](T)"
+                    var miOri = methodsOfTypeOri.Find(m => m.ToString() == sig);
+                    if (miOri != null)
+                    {
+                        if((miOri is MethodInfo) && miOri.ContainsGenericParameters) // 泛型方法, 使用 object 类型填充
+                        {
+                            Type[] genericArgs = miOri.GetGenericArguments();
+                            for (int i = 0, imax = genericArgs.Length; i < imax; i++)
+                                genericArgs[i] = typeof(object);
+                            MethodInfo gMiOri = (miOri as MethodInfo).MakeGenericMethod(genericArgs);
+
+                            genericArgs = miPatch.GetGenericArguments();
+                            for (int i = 0, imax = genericArgs.Length; i < imax; i++)
+                                genericArgs[i] = typeof(object);
+
+                            MethodInfo gMiPatch = (miPatch as MethodInfo).MakeGenericMethod(genericArgs);
+                            methodsToHook.Add(gMiOri, gMiPatch);
+                        }
+                        else
+                            methodsToHook.Add(miOri, miPatch);
+                    }
+                    else
+                        Debug.Log($"new method `{sig}` of type `{oriType}`");
+                }
+            }
+
+            var hookTag = string.Format(kHotReloadHookTag_Fmt, original.GetName().Name);
+            foreach (var kv in methodsToHook)
+            {
+                var miOri = kv.Key;
+                var miPatch = kv.Value;
+                if(miOri.ContainsGenericParameters || miOri.IsConstructedGenericMethod)
+                {
+                    continue;
+                }
+                //new MethodHook(kv.Key, kv.Value, null, hookTag).Install();
             }
         }
 
-        public static void DoHook(Dictionary<string, List<MethodBase>> methodsToHook)
+        static void DoHook(Dictionary<string, List<MethodBase>> methodsToHook)
         {
             foreach(var kv in methodsToHook)
             {

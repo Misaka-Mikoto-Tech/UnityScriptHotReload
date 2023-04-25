@@ -291,6 +291,9 @@ public class MethodPatcher
     /// <returns></returns>
     TypeSig GetBaseTypeSig(TypeSig patchTypeSig)
     {
+        if (patchTypeSig.IsGenericTypeParameter || patchTypeSig.IsGenericMethodParameter) // 泛型参数直接原样返回
+            return patchTypeSig;
+
         string fullName = patchTypeSig.ToString();
         lock(s_baseTypeSigCache)
         {
