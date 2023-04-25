@@ -73,7 +73,6 @@ namespace MonoHook
     {
         public string tag;
         public bool isHooked { get; private set; }
-        public bool isPlayModeHook { get; private set; }
 
         public MethodBase targetMethod { get; private set; }       // 需要被hook的目标方法
         public MethodBase replacementMethod { get; private set; }  // 被hook后的替代方法
@@ -134,7 +133,6 @@ namespace MonoHook
 #else
             DoInstall();
 #endif
-            isPlayModeHook = Application.isPlaying;
         }
 
         public void Uninstall()

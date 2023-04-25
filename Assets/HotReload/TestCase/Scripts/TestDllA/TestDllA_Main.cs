@@ -262,11 +262,19 @@ namespace NS_Test
                 ref TestStruct* pts2 = ref pts; ;
             }
 
+            var testClsG = new TestClsG<Vector3>();
+            bool b0 = testClsG.FuncA(123);
+            bool b1 = testClsG.FuncB(234, "cba");
+            bool b2 = testClsG.FuncB<float>(456, Vector3.one, 7.89f);
+
+            var testClsG_Normal = new TestClsG<Vector3>.TestClsGInner_Normal();
+            var i0 = testClsG_Normal.Inner_Normal_Func(200);
+
             _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             _genericFiledTest.innerField_i = 257;
             _genericFiledTest.innerField_V = new TestDll_2();
 
-            var val0 = _genericFiledTest.ShowInner(2);
+            var val0 = _genericFiledTest.ShowInner(2); // TODO 泛型的 NestedClass 的函数调用会 Crash
             var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
             var val2 = _genericFiledTest.FuncG(this, "test words", null);
             
@@ -310,6 +318,15 @@ namespace NS_Test
 
     public class TestClsG<T>
     {
+        public class TestClsGInner_Normal
+        {
+            public int val_n;
+            public int Inner_Normal_Func(int x)
+            {
+                return x * 2;
+            }
+        }
+
         public class TestClsGInner<V>
         {
             public int innerField_i;
@@ -355,7 +372,8 @@ namespace NS_Test
             return y > 10;
         }
 
-        public bool FuncB(int y, T arg1, List<int> arg2, List<T> arg3, List<List<TestCls>> arg4, List<Dictionary<int, T>> arg5)
+        public bool FuncB(int y, T arg1, List<int> arg2, List<T> arg3, List<List<TestCls>> arg4
+            , List<Dictionary<int, T>> arg5, List<List<TestClsGInner<T>>> arg6)
         {
             Debug.Log("FuncB 1");
             Debug.Log(arg1.GetType().FullName);

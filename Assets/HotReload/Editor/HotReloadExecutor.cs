@@ -13,6 +13,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using MonoHook;
+using DotNetDetour;
 
 namespace ScriptHotReload
 {
@@ -102,6 +103,10 @@ namespace ScriptHotReload
 
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             EditorApplication.update += OnEditorUpdate;
+
+            // hack: 提前在主线程初始下Hook相关静态类，因为下面我们将在子线程中执行Hook, 而Unity相关函数只允许在主线程调用
+            HookUtils.GetPageAlignedAddr(1234, 10);
+            LDasm.IsiOS();
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange mode)
@@ -132,7 +137,7 @@ namespace ScriptHotReload
 
         private static void OnEditorUpdate()
         {
-            if (!(HotReloadConfig.hotReloadEnabled && Application.isPlaying))
+            if (LDasm.IsiOS() || !(HotReloadConfig.hotReloadEnabled && Application.isPlaying))
                 return;
 
             if (_patchTask != null)
@@ -295,7 +300,7 @@ namespace ScriptHotReload
                         }
 
                         HookAssemblies.DoHook(oriAssembly, patchAssembly);
-                        exitCode = -1;
+                        //exitCode = -1;
                     }
                 }
                 catch(Exception ex)

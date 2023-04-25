@@ -56,7 +56,7 @@ namespace ScriptHotReload
                     for (int i = 0, imax = genericArgs.Length; i < imax; i++) //泛型类型只用 object 类型填充
                         genericArgs[i] = typeof(object);
                     oriType = oriType.MakeGenericType(genericArgs);
-                    //patchType = patchType.MakeGenericType(genericArgs);
+                    patchType = patchType.MakeGenericType(genericArgs);
                 }
 
                 methodsOfTypeOri.Clear();
@@ -79,11 +79,6 @@ namespace ScriptHotReload
                             for (int i = 0, imax = genericArgs.Length; i < imax; i++)
                                 genericArgs[i] = typeof(object);
                             MethodInfo gMiOri = (miOri as MethodInfo).MakeGenericMethod(genericArgs);
-
-                            genericArgs = miPatch.GetGenericArguments();
-                            for (int i = 0, imax = genericArgs.Length; i < imax; i++)
-                                genericArgs[i] = typeof(object);
-
                             MethodInfo gMiPatch = (miPatch as MethodInfo).MakeGenericMethod(genericArgs);
                             methodsToHook.Add(gMiOri, gMiPatch);
                         }
@@ -100,11 +95,13 @@ namespace ScriptHotReload
             {
                 var miOri = kv.Key;
                 var miPatch = kv.Value;
-                if(miOri.ContainsGenericParameters || miOri.IsConstructedGenericMethod)
+
+                // 某些重载的函数是相同的地址，比如 struct.Equals()
+                if(miOri.MethodHandle.GetFunctionPointer() != miPatch.MethodHandle.GetFunctionPointer())
                 {
-                    continue;
+                    Debug.Log($"Hook Method:{kv.Key.DeclaringType}:{kv.Key}");
+                    new MethodHook(kv.Key, kv.Value, null, hookTag).Install();
                 }
-                //new MethodHook(kv.Key, kv.Value, null, hookTag).Install();
             }
         }
 
