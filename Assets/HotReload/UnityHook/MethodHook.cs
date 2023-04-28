@@ -15,6 +15,7 @@ using UnityEditor;
 #endif
 using UnityEngine;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 
 /*
@@ -71,6 +72,7 @@ namespace MonoHook
     /// </summary>
     public unsafe class MethodHook
     {
+        public static bool onlyShowAddr = false;
         public string tag;
         public bool isHooked { get; private set; }
 
@@ -131,8 +133,48 @@ namespace MonoHook
             else
                 EditorApplication.update += OnEditorUpdate;
 #else
-            DoInstall();
+            if (!onlyShowAddr)
+                DoInstall();
+            else
+                ShowAddrs();
 #endif
+        }
+
+        private static List<MethodHook> s_waitForHook = new List<MethodHook>();
+
+        public static void ProcessWaitHooks()
+        {
+            MethodHook.onlyShowAddr = false;
+            foreach (var hook in s_waitForHook)
+                new MethodHook(hook.targetMethod, hook.replacementMethod, hook.proxyMethod, hook.tag).DoInstall();
+            MethodHook.s_waitForHook.Clear();
+        }
+
+        private void ShowAddrs()
+        {
+            if (targetMethod == null || replacementMethod == null)
+                throw new Exception("none of methods targetMethod or replacementMethod can be null");
+
+            if (_codePatcher == null)
+            {
+                if (GetFunctionAddr())
+                {
+#if ENABLE_HOOK_DEBUG
+                    UnityEngine.Debug.Log($"Original [{targetMethod.DeclaringType.Name}.{targetMethod.Name}]: {HookUtils.HexToString(_targetPtr.ToPointer(), 64, -16)}");
+                    UnityEngine.Debug.Log($"Original [{replacementMethod.DeclaringType.Name}.{replacementMethod.Name}]: {HookUtils.HexToString(_replacementPtr.ToPointer(), 64, -16)}");
+                    if (proxyMethod != null)
+                        UnityEngine.Debug.Log($"Original [{proxyMethod.DeclaringType.Name}.{proxyMethod.Name}]: {HookUtils.HexToString(_proxyPtr.ToPointer(), 64, -16)}");
+#endif
+
+#if ENABLE_HOOK_DEBUG
+                    UnityEngine.Debug.Log($"New [{targetMethod.DeclaringType.Name}.{targetMethod.Name}]: {HookUtils.HexToString(_targetPtr.ToPointer(), 64, -16)}");
+                    UnityEngine.Debug.Log($"New [{replacementMethod.DeclaringType.Name}.{replacementMethod.Name}]: {HookUtils.HexToString(_replacementPtr.ToPointer(), 64, -16)}");
+                    if (proxyMethod != null)
+                        UnityEngine.Debug.Log($"New [{proxyMethod.DeclaringType.Name}.{proxyMethod.Name}]: {HookUtils.HexToString(_proxyPtr.ToPointer(), 64, -16)}");
+#endif
+                }
+            }
+            s_waitForHook.Add(this);
         }
 
         public void Uninstall()

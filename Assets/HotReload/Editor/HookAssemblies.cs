@@ -46,6 +46,15 @@ namespace ScriptHotReload
             foreach (var kv in dicTypesPatch)
             {
                 Type patchType = kv.Value;
+
+                /*
+                 * 这是编译器自动生成的 lambda 表达式静态类
+                 * 其函数名和字段名是自动编号的，即使查找到同名同类型的成员也不一定对应的就是同一个对象
+                 * 因此不执行hook
+                 */
+                if (patchType.FullName.Contains("<>c"))
+                    continue;
+
                 Type oriType;
                 if (!dicTypesOri.TryGetValue(kv.Key, out oriType))
                     continue; // patch中新增的类型
@@ -69,6 +78,9 @@ namespace ScriptHotReload
                 
                 foreach(var miPatch in methodsOfTypePatch)
                 {
+                    if (miPatch.Name == ".cctor")
+                        continue;
+
                     string sig = miPatch.ToString(); // "T TestG[T](T)"
                     var miOri = methodsOfTypeOri.Find(m => m.ToString() == sig);
                     if (miOri != null)

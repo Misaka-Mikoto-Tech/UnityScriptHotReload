@@ -1,4 +1,5 @@
-﻿using NS_Test;
+﻿using MonoHook;
+using NS_Test;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,6 +10,7 @@ using UnityEngine.UI;
 public class Test : MonoBehaviour
 {
     public Button btnTest;
+    public Button btnApplyPatch;
 
     public void GFuncA<T>(T obj)
     {
@@ -34,6 +36,8 @@ public class Test : MonoBehaviour
         //Debug.Log($"miF:{miF.MethodHandle.GetFunctionPointer().ToInt64():X}");
 
         btnTest.onClick.AddListener(OnBtnTest);
+        btnApplyPatch.onClick.AddListener(OnBtnApplyPatch);
+
         NS_Test.TestCls.s_val = 456;
         NS_Test.Test4.val = 1234;
     }
@@ -98,6 +102,12 @@ public class Test : MonoBehaviour
 
         }
         
+    }
+
+    void OnBtnApplyPatch()
+    {
+        MethodHook.onlyShowAddr = false;
+        MethodHook.ProcessWaitHooks();
     }
 
     static Type ParseType(string typeName)

@@ -1,10 +1,12 @@
-﻿//#define APPLY_PATCH
+﻿#define APPLY_PATCH
 
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace NS_Test
@@ -105,6 +107,16 @@ namespace NS_Test
                 Debug.Log($"<color=yellow>FuncInnerA: patched</color> {innerX + val + 1}");
 #endif
             }
+
+            public int Inner_Normal_Func_NoG(int x)
+            {
+                return x * 2;
+            }
+
+            public int Inner_Normal_Func_WithG<U>(int x, U y)
+            {
+                return x * 2;
+            }
         }
 
         public static int s_val = 123;
@@ -115,21 +127,29 @@ namespace NS_Test
         private InnerTest _innerTest = new InnerTest();
         private TestClsG<TestCls>.TestClsGInner<TestDll_2> _genericFiledTest;
 
-        public Action<int> act = x =>
-        {
-            x += 2;
-            Debug.Log(x * 3);
-        };
+        public Action<int> act;
 
-        public Action<int> act2 = x =>
-        {
-            x += 2;
-            Debug.Log(x * 3);
-            Debug.Log(str2);
-        };
+        public Action<int> act2;
 
         public TestCls(GameObject go)
         {
+            MessageBox(IntPtr.Zero, "text0", "title0", 0);
+            int val = 0x3456;
+            Action<int> act = x =>
+            {
+                x += 2;
+                Debug.Log(x * 3);
+            };
+            this.act = act;
+
+            Action<int> act2 = x =>
+            {
+                x += 2;
+                Debug.Log(x * 3);
+                Debug.Log(str2);
+            };
+            this.act2 = act2;
+
             _go = go;
         }
 
@@ -231,6 +251,9 @@ namespace NS_Test
         }
 #endif
 
+        [DllImport("user32.dll", SetLastError = false, CharSet = CharSet.Auto)]
+        public static extern int MessageBox(IntPtr hWnd, String text, String caption, uint type);
+
         public void TestGeneric()
         {
             // 测试各种当前Assembly和其它Assembly内定义的非泛型和泛型类型
@@ -267,14 +290,32 @@ namespace NS_Test
             bool b1 = testClsG.FuncB(234, "cba");
             bool b2 = testClsG.FuncB<float>(456, Vector3.one, 7.89f);
 
-            var testClsG_Normal = new TestClsG<Vector3>.TestClsGInner_Normal();
+            var cls0 = new TestCls.InnerTest();
+            var i000 = cls0.Inner_Normal_Func_NoG(200); // 此处不会Crash
+
+            MessageBox(IntPtr.Zero, "text1", "title1", 0);
+            int i00 = 0x3456;
+
+#if APPLY_PATCH
+            FuncNew();
+#endif
+            var miG = (from m in typeof(InnerTest).GetMethods().ToList() where m.Name.Contains("Inner_Normal_Func_WithG") select m).First();
+            var mi = miG.MakeGenericMethod(typeof(TestCls));
+            long addr = mi.MethodHandle.GetFunctionPointer().ToInt64();
+            string addrStr = $"{addr:X}";
+
+            var i001 = cls0.Inner_Normal_Func_WithG<TestCls>(201, null);
+            MessageBox(IntPtr.Zero, "text2", "title2", 0);
+
+            var testClsG_Normal = new TestClsG<TestCls>.TestClsGInner_Normal();
             var i0 = testClsG_Normal.Inner_Normal_Func(200);
 
             _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             _genericFiledTest.innerField_i = 257;
             _genericFiledTest.innerField_V = new TestDll_2();
 
-            var val0 = _genericFiledTest.ShowInner(2); // TODO 泛型的 NestedClass 的函数调用会 Crash
+            var val0 = _genericFiledTest.ShowInner(0x2345);
+            
             var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
             var val2 = _genericFiledTest.FuncG(this, "test words", null);
             
@@ -282,7 +323,7 @@ namespace NS_Test
             var tmpGenericObj = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             Func<TestCls, string, TestDll_2, TestDll_2> funcG = tmpGenericObj.FuncG;
             var val3 = funcG(this, "test words 2", null);
-
+            Debug.Log($"i00:{i00}");
 
             var comp = _go.GetComponent<MonoTestA>();
             comp.ShowText();
@@ -334,9 +375,10 @@ namespace NS_Test
 
             public int ShowInner(int x)
             {
+                x += 0x5678;
                 GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 go.AddComponent<MonoTestA>();
-                var val1 = ShowGInner<long>(default(T), default(V), 2345);
+                var val1 = ShowGInner<long>(default(T), default(V), x);
                 var val2 = FuncG(default(T), "abc", default(V));
 #if !APPLY_PATCH
                 return x + 1;
