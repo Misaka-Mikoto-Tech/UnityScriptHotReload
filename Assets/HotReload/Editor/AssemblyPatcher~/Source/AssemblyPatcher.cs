@@ -107,6 +107,13 @@ public class AssemblyPatcher
                 var lambdaWrapperBackend = GlobalConfig.Instance.lambdaWrapperBackend;
                 foreach (var tdef in fixedType)
                 {
+                    /*
+                    * 这是编译器自动生成的 lambda 表达式静态类
+                    * 由于代码修正时不会重定向其引用(自动编号的成员名称无法精确匹配)，因此需要保留其静态函数初始化代码
+                    */
+                    if (tdef.FullName.Contains("<>c"))
+                        continue;
+
                     // 新定义的类型静态构造函数即使执行也是第一次执行，因此逻辑只能修正不能移除
                     if (assemblyDataForPatch.addedTypes.ContainsKey(tdef.FullName))
                         continue;

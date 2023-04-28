@@ -9,6 +9,9 @@ using dnlib.DotNet.Emit;
 
 namespace AssemblyPatcher;
 
+/// <summary>
+/// 将方法的参数，返回值，函数体内对类型，方法，字段的引用全部重定向到原始dll内对应的成员（lambda表达式类型及成员除外）
+/// </summary>
 public class MethodPatcher
 {
     AssemblyDataForPatch _assemblyDataForPatch;
@@ -74,6 +77,7 @@ public class MethodPatcher
                     /*
                      * 其它dll内的非泛型实例直接跳过（eg. int, bool)
                      * 请注意！，泛型在其它dll定义但泛型参数在当前dll内时 DefinitionAssembly 也是其它dll, 例如 Action<MyClass> 的定义就在 mscorlib 内
+                     * 另外，泛型参数(T,V,U) 等的类型为 TypeSpecMD
                      */
                     if ((typeDefOrRef is not TypeSpec) && typeDefOrRef.DefinitionAssembly != patchAssembly)
                         break;
@@ -127,6 +131,14 @@ public class MethodPatcher
     IField GetBaseFieldRef(IField fieldDefOrRef)
     {
         string fullName = fieldDefOrRef.ToString();
+
+        /*
+        * 这是编译器自动生成的 lambda 表达式静态类
+        * 其函数名和字段名是自动编号的，即使查找到同名同类型的成员也不一定对应的就是同一个对象
+        */
+        if (fullName.Contains("/<>c::"))
+            return fieldDefOrRef;
+
         lock (s_baseFieldRefCache)
         {
             if (s_baseFieldRefCache.TryGetValue(fullName, out var cache))
@@ -166,7 +178,15 @@ public class MethodPatcher
          * 而前者包括后者及Class字段记录了其所属的类型，因此可以通过MethodSig在不同Module间查找或者定义方法
          */
         string fullName = methodDefOrRef.ToString();
-        lock(s_baseMethodRefCache)
+
+        /*
+        * 这是编译器自动生成的 lambda 表达式静态类
+        * 其函数名和字段名是自动编号的，即使查找到同名同类型的成员也不一定对应的就是同一个对象
+        */
+        if (fullName.Contains("/<>c::"))
+            return methodDefOrRef;
+
+        lock (s_baseMethodRefCache)
         {
             if (s_baseMethodRefCache.TryGetValue(fullName, out var cache))
                 return cache;
@@ -265,7 +285,19 @@ public class MethodPatcher
 
     ITypeDefOrRef GetBaseTypeOrRef(ITypeDefOrRef patchType)
     {
+        var sig = patchType.ToTypeSig();
+        if (sig.IsGenericTypeParameter || sig.IsGenericMethodParameter) // 泛型参数(T,V,U)不重定向
+            return patchType;
+
         string fullName = patchType.ToString();
+
+        /*
+        * 这是编译器自动生成的 lambda 表达式静态类
+        * 其函数名和字段名是自动编号的，即使查找到同名同类型的成员也不一定对应的就是同一个对象
+        */
+        if (fullName.Contains("<>c"))
+            return patchType;
+
         ITypeDefOrRef ret;
         lock (s_baseTypeOrRefCache)
         {
@@ -273,7 +305,7 @@ public class MethodPatcher
                 return ret;
         }
 
-        ret = GetBaseTypeSig(patchType.ToTypeSig())?.ToTypeDefOrRef();
+        ret = GetBaseTypeSig(sig)?.ToTypeDefOrRef();
         Debug.Assert(ret != null);
 
         lock (s_baseTypeOrRefCache)
@@ -291,7 +323,7 @@ public class MethodPatcher
     /// <returns></returns>
     TypeSig GetBaseTypeSig(TypeSig patchTypeSig)
     {
-        if (patchTypeSig.IsGenericTypeParameter || patchTypeSig.IsGenericMethodParameter) // 泛型参数直接原样返回
+        if (patchTypeSig.IsGenericTypeParameter || patchTypeSig.IsGenericMethodParameter) // 泛型参数(T,V,U)不重定向
             return patchTypeSig;
 
         string fullName = patchTypeSig.ToString();

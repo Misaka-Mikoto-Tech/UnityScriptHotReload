@@ -29,6 +29,9 @@ public class SourceCompiler
     
     public int DoCompile()
     {
+        File.Delete(outputPath);
+        File.Delete(Path.ChangeExtension(outputPath, ".pdb"));
+
         _rspPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch.rsp";
         _assAttrPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch_Attr.cs";
 
