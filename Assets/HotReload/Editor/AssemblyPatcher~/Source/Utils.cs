@@ -14,6 +14,8 @@ using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
 using dnlib.DotNet.Emit;
+using MethodAttributes = dnlib.DotNet.MethodAttributes;
+using MethodImplAttributes = dnlib.DotNet.MethodImplAttributes;
 
 namespace AssemblyPatcher;
 
@@ -315,7 +317,7 @@ public static class Utils
     }
 
     /// <summary>
-    /// 获取完全没有泛型参数的定义（dnlib只有FullName有生成，但没有提供获取对象的方法）
+    /// 生成完全没有泛型参数的定义（dnlib只有FullName有生成，但没有提供获取对象的方法）
     /// </summary>
     /// <param name="method"></param>
     /// <returns></returns>
@@ -342,10 +344,11 @@ public static class Utils
 
         // 如果是成员方法，改成静态方法, 并添加 self 参数
         var paraDefs = new List<ParamDef>();
+        fixedMethodSig.HasThis = false;
+        fixedMethodSig.CallingConvention &= ~CallingConvention.ThisCall;
         if (hasThis)
         {
-            fixedMethodSig.HasThis = false;
-            fixedMethodSig.Params.Insert(0, method.DeclaringType.ToTypeSig());
+            fixedMethodSig.Params.Insert(0, type.ToTypeSig());
             paraDefs.Add(new ParamDefUser("self", 0));
         }
 
@@ -355,7 +358,7 @@ public static class Utils
         }
 
         MemberRef memberRef = new MemberRefUser(method.Module, method.Name);
-        memberRef.Signature = fixedMethodSig;
+        memberRef.Signature = method.MethodSig;
         memberRef.Class = type;
 
         if (method.GenericParameters.Count > 0)
@@ -372,7 +375,9 @@ public static class Utils
             instMethod = memberRef;
 
         MethodSig wrapperSig = GenericArgumentResolver.Resolve(fixedMethodSig, typeGenArgs, methodGenArgs);
-        MethodDefUser wrapperMethod = new MethodDefUser($"{method.Name}_wrapper_{idx}", wrapperSig);
+        MethodDefUser wrapperMethod = new MethodDefUser($"{method.Name}_wrapper_{idx}", wrapperSig
+            , MethodImplAttributes.NoInlining | MethodImplAttributes.NoOptimization
+            , MethodAttributes.Public | MethodAttributes.Static);
         wrapperMethod.DeclaringType = wrapperType;
 
         wrapperMethod.ParamDefs.Clear();
