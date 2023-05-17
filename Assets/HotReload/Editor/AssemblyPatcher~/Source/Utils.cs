@@ -13,6 +13,7 @@ using System.Linq;
 using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
+using dnlib.DotNet.Emit;
 
 namespace AssemblyPatcher;
 
@@ -276,5 +277,117 @@ public static class Utils
         string ret = string.Format(GlobalConfig.Instance.patchDllPathFormat, Path.GetFileNameWithoutExtension(baseDllName), GlobalConfig.Instance.patchNo);
         ret = Path.GetFileNameWithoutExtension(ret);
         return ret;
+    }
+
+    /// <summary>
+    /// 生成泛型wrapper方法体
+    /// </summary>
+    /// <param name="wrapper"></param>
+    /// <param name="target"></param>
+    /// <returns></returns>
+    public static MethodDef GenWrapperMethodBody(this MethodDef method, int idx, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    {
+        (MethodDef wrapper, IMethod target) = GetWrapperMethodInfo(method, idx, wrapperType, typeGenArgs, methodGenArgs);
+
+        wrapper.Body = new CilBody();
+        var instructions = wrapper.Body.Instructions;
+
+        for (int i = 0, imax = wrapper.ParamDefs.Count; i < imax; i++)
+        {
+            switch (i)
+            {
+                case 0:
+                    instructions.Add(Instruction.Create(OpCodes.Ldarg_0)); break;
+                case 1:
+                    instructions.Add(Instruction.Create(OpCodes.Ldarg_1)); break;
+                case 2:
+                    instructions.Add(Instruction.Create(OpCodes.Ldarg_2)); break;
+                case 3:
+                    instructions.Add(Instruction.Create(OpCodes.Ldarg_3)); break;
+                default:
+                    instructions.Add(Instruction.Create(OpCodes.Ldarga_S, wrapper.Parameters[i])); break;
+            }
+        }
+
+        instructions.Add(Instruction.Create(OpCodes.Call, target));
+        instructions.Add(Instruction.Create(OpCodes.Ret));
+        return wrapper;
+    }
+
+    /// <summary>
+    /// 获取完全没有泛型参数的定义（dnlib只有FullName有生成，但没有提供获取对象的方法）
+    /// </summary>
+    /// <param name="method"></param>
+    /// <returns></returns>
+    /// <remarks>参考自 FullNameFactory.MethodFullNameSB()</remarks>
+    private static (MethodDef wrapper, IMethod target) GetWrapperMethodInfo(MethodDef method, int idx, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    {
+        IMethod instMethod = method; // 填充泛型参数后的方法
+        MethodSig fixedMethodSig = method.MethodSig.Clone(); // 实例方法签名需要修改为静态方法
+        ITypeDefOrRef type = method.DeclaringType;
+        bool hasThis = fixedMethodSig.HasThis;
+
+        // 如果方法所属的类型是泛型类型，则填充类型的泛型参数
+        var tGenericParas = (type as TypeDef).GenericParameters;
+        if (tGenericParas.Count > 0)
+        {
+            TypeSig[] tArgSigs = new TypeSig[tGenericParas.Count]; // NestedClass 会输出所有的泛型参数，因此无需递归
+            for (int i = 0, imax = tArgSigs.Length; i < imax; i++)
+                tArgSigs[i] = typeGenArgs[i];
+
+            var typeSig = type.ToTypeSig();
+            typeSig = new GenericInstSig(typeSig as ClassOrValueTypeSig, tArgSigs);
+            type = new TypeSpecUser(typeSig); // 将泛型type替换为实例type
+        }
+
+        // 如果是成员方法，改成静态方法, 并添加 self 参数
+        var paraDefs = new List<ParamDef>();
+        if (hasThis)
+        {
+            fixedMethodSig.HasThis = false;
+            fixedMethodSig.Params.Insert(0, method.DeclaringType.ToTypeSig());
+            paraDefs.Add(new ParamDefUser("self", 0));
+        }
+
+        foreach (var para in method.ParamDefs)
+        {
+            paraDefs.Add(new ParamDefUser(para.Name, (ushort)paraDefs.Count));
+        }
+
+        MemberRef memberRef = new MemberRefUser(method.Module, method.Name);
+        memberRef.Signature = fixedMethodSig;
+        memberRef.Class = type;
+
+        if (method.GenericParameters.Count > 0)
+        {
+            TypeSig[] argSigs = new TypeSig[method.GenericParameters.Count];
+            for (int i = 0, imax = argSigs.Length; i < imax; i++)
+                argSigs[i] = methodGenArgs[i];
+
+            var instSig = new GenericInstMethodSig(argSigs);
+            var methodSpec = new MethodSpecUser(memberRef, instSig);
+            instMethod = methodSpec;
+        }
+        else
+            instMethod = memberRef;
+
+        MethodSig wrapperSig = GenericArgumentResolver.Resolve(fixedMethodSig, typeGenArgs, methodGenArgs);
+        MethodDefUser wrapperMethod = new MethodDefUser($"{method.Name}_wrapper_{idx}", wrapperSig);
+        wrapperMethod.DeclaringType = wrapperType;
+
+        wrapperMethod.ParamDefs.Clear();
+        var paramDefs = wrapperMethod.ParamDefs;
+
+        // 如果目标是成员方法，添加 self 参数定义
+        if (hasThis)
+            paramDefs.Add(new ParamDefUser("self", 1)); // Return is '0'
+
+        foreach (var para in method.ParamDefs)
+            paramDefs.Add(new ParamDefUser(para.Name, (ushort)(paramDefs.Count + 1)));
+
+        if (paramDefs.Count != wrapperMethod.Parameters.Count)
+            throw new Exception($"{method.FullName}:count of ParamDef and Parameters are not equal!");
+
+        return (wrapperMethod, instMethod);
     }
 }

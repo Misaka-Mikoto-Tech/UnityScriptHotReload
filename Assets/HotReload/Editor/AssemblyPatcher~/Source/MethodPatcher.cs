@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
+using NHibernate.Util;
 
 namespace AssemblyPatcher;
 
@@ -95,9 +96,12 @@ public class MethodPatcher
                     if (methodDefOrRef.IsField) // System.Int32 NS_Test.TestClsG`1/TestClsGInner`1<NS_Test.TestCls,NS_Test.TestDll_2>::innerField_i
                         ins.Operand = GetBaseFieldRef(methodDefOrRef as IField);
                     else
+                    {
                         ins.Operand = GetBaseMethodRef(methodDefOrRef);
+                    }
                     break;
                 case MethodSpec methodSpec: // 泛型实例，（为什么 TypeSpec 继承自 ITypeDefOrRef， 但 MethodSpec 就不继承自 IMethodDefOrRef 呢？）
+                    var sig1 = (methodSpec as IMethod).MethodSig;
                     ins.Operand = GetBaseMethodSpec(methodSpec);
                     break;
                 /*
@@ -108,7 +112,9 @@ public class MethodPatcher
                  */
                 case IMemberRef memberRef:
                     if (memberRef.IsMethod)
+                    {
                         ins.Operand = GetBaseMethodRef(memberRef as IMethodDefOrRef);
+                    }
                     else
                         throw new NotImplementedException($"类型引用尚未实现：{memberRef}");
                     break;
@@ -210,7 +216,7 @@ public class MethodPatcher
             * .net 不支持偏特化, 因此不存在泛型实例却带泛型参数方法的情况, 此处的 methodDefOrRef 一定没有泛型参数
             */
 
-            var declType = methodDefOrRef.DeclaringType;
+            var declType = methodDefOrRef.DeclaringType; // Nested Type 会显示全称
             var typeSig = declType.ToTypeSig();
             if (typeSig.IsGenericInstanceType)
             {
@@ -423,7 +429,7 @@ public class MethodPatcher
                 throw new Exception($"can not find type:{genericType}");
         }
 
-        TypeSig[] baseArgSigs = new TypeSig[patchGISig.GenericArguments.Count];
+        TypeSig[] baseArgSigs = new TypeSig[patchGISig.GenericArguments.Count]; // NestedClass 会输出所有的泛型参数，因此无需递归
         for (int i = 0, imax = baseArgSigs.Length; i < imax; i++)
         {
             baseArgSigs[i] = GetBaseTypeSig(patchGISig.GenericArguments[i]);

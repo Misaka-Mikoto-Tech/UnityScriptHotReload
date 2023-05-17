@@ -31,6 +31,7 @@ public class AssemblyDataForPatch
     public string                       patchName;
     public ModuleDefData                baseDllData;
     public ModuleDefData                patchDllData;
+    public ModuleDefData                shareCodeDllData;
     /// <summary>
     /// PatchDll新增的类型
     /// </summary>
@@ -62,6 +63,7 @@ public class AssemblyDataForPatch
     {
         baseDllData = ModuleDefPool.GetModuleData(name);
         patchDllData = ModuleDefPool.GetModuleData(patchName);
+        shareCodeDllData = ModuleDefPool.GetModuleData("ShareCode");
         addedTypes.Clear();
 
         var baseTypes = baseDllData.types;

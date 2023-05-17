@@ -1,4 +1,4 @@
-﻿#define APPLY_PATCH
+﻿//#define APPLY_PATCH
 
 using System;
 using System.Collections;
@@ -11,6 +11,12 @@ using UnityEngine;
 
 namespace NS_Test
 {
+
+    public class NS_TestAttribute: Attribute
+    {
+        public int index;
+        public Type[] types;
+    }
 
     public struct TestStruct
     {
@@ -164,6 +170,7 @@ namespace NS_Test
             Debug.Log("static constructor");
         }
 
+        [NS_Test(index = 2, types = new Type[] {typeof(int), typeof(string), typeof(TestCls)})]
         public void FuncA(out int val)
         {
             val = 2;
@@ -199,6 +206,7 @@ namespace NS_Test
             Debug.Log("static constructor patched");
         }
 
+        [NS_Test(index = 5, types = new Type[] {typeof(int), typeof(string), typeof(TestCls)})]
         public void FuncA(out int val)
         {
             val = 2000;
@@ -288,7 +296,7 @@ namespace NS_Test
             var testClsG = new TestClsG<Vector3>();
             bool b0 = testClsG.FuncA(123);
             bool b1 = testClsG.FuncB(234, "cba");
-            bool b2 = testClsG.FuncB<float>(456, Vector3.one, 7.89f);
+            bool b2 = testClsG.FuncC<float>(456, null, 7.89f, null, null);
 
             var cls0 = new TestCls.InnerTest();
             var i000 = cls0.Inner_Normal_Func_NoG(200); // 此处不会Crash
@@ -422,7 +430,7 @@ namespace NS_Test
             return y > 10;
         }
 
-        public bool FuncB<U>(int y, T arg1, U arg2)
+        public bool FuncC<U>(int y, T[] arg1, in U arg2, List<T> arg3, List<U> arg4)
         {
             Debug.Log("FuncB 1");
             Debug.Log(arg1.GetType().FullName);

@@ -63,6 +63,7 @@ public static class ModuleDefPool
 
         ret = new ModuleDefData() { name = moduleName };
         ret.moduleDef = ModuleDefMD.Load(fullPath, ctx);
+        (ret.moduleDef.Context.AssemblyResolver as AssemblyResolver).AddToCache(ret.moduleDef);
 
         ret.assRef = new AssemblyRefUser(ret.moduleDef.Assembly);
         ret.moduleRef = new ModuleRefUser(ret.moduleDef);
