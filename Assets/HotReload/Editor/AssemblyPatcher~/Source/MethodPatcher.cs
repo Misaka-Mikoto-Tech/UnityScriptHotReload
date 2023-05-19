@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
-using NHibernate.Util;
 
 namespace AssemblyPatcher;
 

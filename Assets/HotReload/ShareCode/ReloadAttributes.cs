@@ -23,9 +23,8 @@ namespace ScriptHotReload
         /// </summary>
         public int index;
         /// <summary>
-        /// 当此字段为 null 时所有泛型参数均为 object, 
-        /// 否则对应相同index的HookWrapperGeneric需要填充的参数
+        /// 方法所属的泛型类型的类型参数列表 + 泛型方法的类型参数列表
         /// </summary>
-        public Type[] types;
+        public Type[] typeGenArgs;
     }
 }

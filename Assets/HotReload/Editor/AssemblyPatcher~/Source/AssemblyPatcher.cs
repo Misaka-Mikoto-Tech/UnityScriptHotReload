@@ -59,10 +59,9 @@ public class AssemblyPatcher
     public string moduleName { get; private set; }
     public AssemblyDataForPatch assemblyDataForPatch { get; private set; }
 
-    private static TypeData _typeGenericMethodIndex;
+    private static TypeData _typeGenericMethodIndex, _typeGenericMethodWrapper;
 
-    private MemberRef _ctorGenericMethodIndex;
-    private MemberRef _ctorGenericMethodWrapper;
+    private MemberRef _ctorGenericMethodIndex, _ctorGenericMethodWrapper;
 
     private CorLibTypeSig   _int32TypeSig;
     private CorLibTypeSig   _stringTypeSig;
@@ -76,6 +75,7 @@ public class AssemblyPatcher
     {
         var shareCode = ModuleDefPool.GetModuleData("ShareCode");
         shareCode.types.TryGetValue("ScriptHotReload.GenericMethodIndexAttribute", out _typeGenericMethodIndex);
+        shareCode.types.TryGetValue("ScriptHotReload.GenericMethodWrapperAttribute", out _typeGenericMethodWrapper);
     }
 
     public AssemblyPatcher(string moduleName)
@@ -91,14 +91,15 @@ public class AssemblyPatcher
         if (!assemblyDataForPatch.isValid)
             return false;
 
-        _int32TypeSig = assemblyDataForPatch.patchDllData.moduleDef.CorLibTypes.Int32;
-        _stringTypeSig = assemblyDataForPatch.patchDllData.moduleDef.CorLibTypes.String;
-        _objectTypeSig = assemblyDataForPatch.patchDllData.moduleDef.CorLibTypes.Object;
-        _typeTypeSig = assemblyDataForPatch.patchDllData.moduleDef.Import(typeof(Type)).ToTypeSig();
-        _typeArrayTypeSig = new ArraySig(_typeTypeSig);
+        var patchDllDef = assemblyDataForPatch.patchDllData.moduleDef;
+        _int32TypeSig = patchDllDef.CorLibTypes.Int32;
+        _stringTypeSig = patchDllDef.CorLibTypes.String;
+        _objectTypeSig = patchDllDef.CorLibTypes.Object;
+        _typeTypeSig = patchDllDef.Import(typeof(Type)).ToTypeSig();
+        _typeArrayTypeSig = new SZArraySig(_typeTypeSig);
 
-        assemblyDataForPatch.patchDllData.moduleDef.Import(_typeGenericMethodIndex.definition);
-        _ctorGenericMethodIndex = assemblyDataForPatch.patchDllData.moduleDef.Import(_typeGenericMethodIndex.definition.FindDefaultConstructor());
+        _ctorGenericMethodIndex = patchDllDef.Import(_typeGenericMethodIndex.definition.FindDefaultConstructor());
+        _ctorGenericMethodWrapper = patchDllDef.Import(_typeGenericMethodWrapper.definition.FindDefaultConstructor());
 
         _methodPatcher = new MethodPatcher(assemblyDataForPatch);
 
@@ -204,7 +205,7 @@ public class AssemblyPatcher
         assemblyDataForPatch.patchDllData.moduleDef.Types.Add(wrapperClass);
 
         List<TypeSig> typeSigs = new List<TypeSig>();
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 6; i++) // TODO 测试代码，先全部填充 object, 将来改成扫描dll内所有的实例化参数
             typeSigs.Add(_objectTypeSig);
 
         foreach (var (_, methodData) in assemblyDataForPatch.patchDllData.allMethods)
@@ -215,7 +216,7 @@ public class AssemblyPatcher
 
             AddCAGenericIndex(method, _wrapperIndex);
             var wrapperMethod = Utils.GenWrapperMethodBody(method, _wrapperIndex, wrapperClass, typeSigs, typeSigs);
-            AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, null);
+            AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeSigs.ToArray());
 
             _wrapperIndex++;
         }
@@ -237,28 +238,29 @@ public class AssemblyPatcher
     /// <summary>
     /// 给wrapper方法添加 [GenericMethodWrapper]
     /// </summary>
-    void AddCAGenericMethodWrapper(MethodDef method, int idx, ClassSig[] types)
+    void AddCAGenericMethodWrapper(MethodDef method, int idx, TypeSig[] types)
     {
-        var argIdx = new CAArgument(_int32TypeSig, idx);
-        var nameArgIdx = new CANamedArgument(true, _int32TypeSig, "index", argIdx);
-
-        CANamedArgument[] caArgs;
+        CANamedArgument nameArgTypes = null;
         if (types != null && types.Length > 0)
         {
             List<CAArgument> caTypes = new List<CAArgument>();
-            foreach(var t in types)
+            foreach (var t in types)
             {
                 caTypes.Add(new CAArgument(_typeTypeSig, t));
             }
             var argTypes = new CAArgument(_typeArrayTypeSig, caTypes);
-            var nameArgTypes = new CANamedArgument(true, _typeArrayTypeSig, "types", argTypes);
-            caArgs = new CANamedArgument[] { nameArgIdx, nameArgTypes };
+            nameArgTypes = new CANamedArgument(true, _typeArrayTypeSig, "typeGenArgs", argTypes);
         }
-        else
-            caArgs = new CANamedArgument[] { nameArgIdx };
 
+        AddCAGenericMethodWrapper(method, idx, nameArgTypes);
+    }
 
-        var ca = new CustomAttribute(_ctorGenericMethodIndex, caArgs);
+    void AddCAGenericMethodWrapper(MethodDef method, int idx, CANamedArgument typeArgs)
+    {
+        var argIdx = new CAArgument(_int32TypeSig, idx);
+        var nameArgIdx = new CANamedArgument(true, _int32TypeSig, "index", argIdx);
+        var caArgs  = new CANamedArgument[] { nameArgIdx, typeArgs };
+        var ca = new CustomAttribute(_ctorGenericMethodWrapper, caArgs);
         method.CustomAttributes.Add(ca);
     }
 
