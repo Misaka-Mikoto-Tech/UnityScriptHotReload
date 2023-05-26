@@ -16,10 +16,10 @@ public class MethodPatcher
 {
     AssemblyDataForPatch _assemblyDataForPatch;
     Importer            _importer;
-    public MethodPatcher(AssemblyDataForPatch assemblyData)
+    public MethodPatcher(AssemblyDataForPatch assemblyData, Importer importer)
     {
         _assemblyDataForPatch = assemblyData;
-        _importer = new Importer(assemblyData.patchDllData.moduleDef);
+        _importer = importer;
     }
 
     public void PatchMethod(MethodDef methodDef, Dictionary<MethodDef, MethodFixStatus> processed, int depth)

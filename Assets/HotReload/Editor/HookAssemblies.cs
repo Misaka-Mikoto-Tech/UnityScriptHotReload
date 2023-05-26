@@ -146,7 +146,7 @@ namespace ScriptHotReload
         }
 
         /// <summary>
-        /// 获取patch dll里创建的wrapper函数数据
+        /// 获取patch dll里自动生成的wrapper函数数据
         /// </summary>
         /// <param name="wrapperType"></param>
         /// <param name="genericTypes">key:oriType, value:patchType</param>
@@ -180,10 +180,11 @@ namespace ScriptHotReload
 
                 List<MethodBase> misOri = new List<MethodBase>();
                 List<MethodBase> misPatch = new List<MethodBase>();
-                misOri.AddRange(typeOri.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic));
-                misOri.AddRange(typeOri.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance));
-                misPatch.AddRange(typePatch.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic));
-                misPatch.AddRange(typePatch.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance));
+                var flags = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                misOri.AddRange(typeOri.GetConstructors(flags));
+                misOri.AddRange(typeOri.GetMethods(flags));
+                misPatch.AddRange(typePatch.GetConstructors(flags));
+                misPatch.AddRange(typePatch.GetMethods(flags));
 
                 foreach (var mPatch in misPatch)
                 {
@@ -209,7 +210,7 @@ namespace ScriptHotReload
         }
 
         /// <summary>
-        /// 构建hook相关的方法对
+        /// 构建泛型方法hook相关的方法对
         /// </summary>
         /// <param name="wrapperDatas"></param>
         /// <returns></returns>
@@ -241,13 +242,15 @@ namespace ScriptHotReload
                         finalType = type.MakeGenericType(genTypeArgs);
 
                         // 实例化的类型内的方法 MetadataToken 不变，因此可以通过此值匹配
-                        if(finallyMi is ConstructorInfo)
+                        int mdToken = finallyMi.MetadataToken;
+                        if (finallyMi is ConstructorInfo)
                             finallyMi = (from m in finalType.GetConstructors(GetBindingFlags(finallyMi))
-                                         where m.MetadataToken == finallyMi.MetadataToken
+                                         where m.MetadataToken == mdToken
                                          select m).First();
                         else
                             finallyMi = (from m in finalType.GetMethods(GetBindingFlags(finallyMi))
-                                     where m.MetadataToken == finallyMi.MetadataToken select m).First();
+                                     where m.MetadataToken == mdToken
+                                         select m).First();
                     }
 
                     if (methodGenCnt > 0 && (genericMethodOri is not ConstructorInfo)) // 没有泛型构造方法这种东西
@@ -256,6 +259,9 @@ namespace ScriptHotReload
                             genMethodArgs[i] = wrapper.typeGenArgs[typeGenCnt + i];
                         finallyMi = (genericMethodOri as MethodInfo).MakeGenericMethod(genMethodArgs);
                     }
+
+                    if (finallyMi.ContainsGenericParameters)
+                        throw new Exception($"instantiate method fail:{finallyMi}");
 
                     ret.Add(finallyMi, wrapper.wrapperMethod);
                 }

@@ -287,9 +287,9 @@ public static class Utils
     /// <param name="wrapper"></param>
     /// <param name="target"></param>
     /// <returns></returns>
-    public static MethodDef GenWrapperMethodBody(this MethodDef method, int idx, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    public static MethodDef GenWrapperMethodBody(MethodDef method, int idx, int idx2, Importer importer, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
     {
-        (MethodDef wrapper, IMethod target) = GetWrapperMethodInfo(method, idx, wrapperType, typeGenArgs, methodGenArgs);
+        (MethodDef wrapper, IMethod target) = GetWrapperMethodInfo(method, idx, idx2, importer, wrapperType, typeGenArgs, methodGenArgs);
 
         wrapper.Body = new CilBody();
         var instructions = wrapper.Body.Instructions;
@@ -319,14 +319,14 @@ public static class Utils
     /// <summary>
     /// 生成完全没有泛型参数的定义（dnlib只有FullName有生成，但没有提供获取对象的方法）
     /// </summary>
-    /// <param name="method"></param>
+    /// <param name="genericMethod"></param>
     /// <returns></returns>
     /// <remarks>参考自 FullNameFactory.MethodFullNameSB()</remarks>
-    private static (MethodDef wrapper, IMethod target) GetWrapperMethodInfo(MethodDef method, int idx, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    private static (MethodDef wrapper, IMethod target) GetWrapperMethodInfo(MethodDef genericMethod, int idx, int idx2, Importer importer, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
     {
-        IMethod instMethod = method; // 填充泛型参数后的方法
-        MethodSig fixedMethodSig = method.MethodSig.Clone(); // 实例方法签名需要修改为静态方法
-        ITypeDefOrRef type = method.DeclaringType;
+        IMethod instMethod = genericMethod; // 填充泛型参数后的方法
+        MethodSig fixedMethodSig = genericMethod.MethodSig.Clone(); // 实例方法签名需要修改为静态方法
+        ITypeDefOrRef type = genericMethod.DeclaringType;
         bool hasThis = fixedMethodSig.HasThis;
 
         // 如果方法所属的类型是泛型类型，则填充类型的泛型参数
@@ -339,8 +339,11 @@ public static class Utils
 
             var typeSig = type.ToTypeSig();
             typeSig = new GenericInstSig(typeSig as ClassOrValueTypeSig, tArgSigs);
+            typeSig = importer.Import(typeSig);
             type = new TypeSpecUser(typeSig); // 将泛型type替换为实例type
         }
+
+        type = importer.Import(type);
 
         // 如果是成员方法，改成静态方法, 并添加 self 参数
         var paraDefs = new List<ParamDef>();
@@ -352,22 +355,23 @@ public static class Utils
             paraDefs.Add(new ParamDefUser("self", 0));
         }
 
-        foreach (var para in method.ParamDefs)
+        foreach (var para in genericMethod.ParamDefs)
         {
             paraDefs.Add(new ParamDefUser(para.Name, (ushort)paraDefs.Count));
         }
 
-        MemberRef memberRef = new MemberRefUser(method.Module, method.Name);
-        memberRef.Signature = method.MethodSig;
+        MemberRef memberRef = new MemberRefUser(genericMethod.Module, genericMethod.Name);
+        memberRef.Signature = genericMethod.MethodSig;
         memberRef.Class = type;
 
-        if (method.GenericParameters.Count > 0)
+        if (genericMethod.GenericParameters.Count > 0)
         {
-            TypeSig[] argSigs = new TypeSig[method.GenericParameters.Count];
+            TypeSig[] argSigs = new TypeSig[genericMethod.GenericParameters.Count];
             for (int i = 0, imax = argSigs.Length; i < imax; i++)
                 argSigs[i] = methodGenArgs[i];
 
             var instSig = new GenericInstMethodSig(argSigs);
+            instSig = importer.Import(instSig);
             var methodSpec = new MethodSpecUser(memberRef, instSig);
             instMethod = methodSpec;
         }
@@ -375,7 +379,7 @@ public static class Utils
             instMethod = memberRef;
 
         MethodSig wrapperSig = GenericArgumentResolver.Resolve(fixedMethodSig, typeGenArgs, methodGenArgs);
-        MethodDefUser wrapperMethod = new MethodDefUser($"{method.Name}_wrapper_{idx}", wrapperSig
+        MethodDefUser wrapperMethod = new MethodDefUser($"{genericMethod.Name}_wrapper_{idx}_{idx2}", wrapperSig
             , MethodImplAttributes.NoInlining | MethodImplAttributes.NoOptimization
             , MethodAttributes.Public | MethodAttributes.Static);
         wrapperMethod.DeclaringType = wrapperType;
@@ -387,11 +391,11 @@ public static class Utils
         if (hasThis)
             paramDefs.Add(new ParamDefUser("self", 1)); // Return is '0'
 
-        foreach (var para in method.ParamDefs)
+        foreach (var para in genericMethod.ParamDefs)
             paramDefs.Add(new ParamDefUser(para.Name, (ushort)(paramDefs.Count + 1)));
 
         if (paramDefs.Count != wrapperMethod.Parameters.Count)
-            throw new Exception($"{method.FullName}:count of ParamDef and Parameters are not equal!");
+            throw new Exception($"{genericMethod.FullName}:count of ParamDef and Parameters are not equal!");
 
         return (wrapperMethod, instMethod);
     }

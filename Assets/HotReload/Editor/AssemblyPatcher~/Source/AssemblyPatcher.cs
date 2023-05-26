@@ -16,7 +16,6 @@ using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
 
-using static AssemblyPatcher.Utils;
 using System.Security.Permissions;
 using SecurityAction = System.Security.Permissions.SecurityAction;
 using dnlib.DotNet.Emit;
@@ -69,6 +68,7 @@ public class AssemblyPatcher
     private TypeSig         _typeTypeSig;
     private TypeSig         _typeArrayTypeSig;
 
+    private Importer            _importer;
     private MethodPatcher       _methodPatcher;
 
     static AssemblyPatcher()
@@ -101,7 +101,8 @@ public class AssemblyPatcher
         _ctorGenericMethodIndex = patchDllDef.Import(_typeGenericMethodIndex.definition.FindDefaultConstructor());
         _ctorGenericMethodWrapper = patchDllDef.Import(_typeGenericMethodWrapper.definition.FindDefaultConstructor());
 
-        _methodPatcher = new MethodPatcher(assemblyDataForPatch);
+        _importer = new Importer(assemblyDataForPatch.patchDllData.moduleDef);
+        _methodPatcher = new MethodPatcher(assemblyDataForPatch, _importer);
 
         FixNewAssembly();
         GenGenericMethodWrappers();
@@ -204,20 +205,23 @@ public class AssemblyPatcher
         
         assemblyDataForPatch.patchDllData.moduleDef.Types.Add(wrapperClass);
 
-        List<TypeSig> typeSigs = new List<TypeSig>();
-        for (int i = 0; i < 6; i++) // TODO 测试代码，先全部填充 object, 将来改成扫描dll内所有的实例化参数
-            typeSigs.Add(_objectTypeSig);
+        // 扫描原始 dll 中的所有泛型实例
+        var genMethodInstDatas = new GenericInstScanner(assemblyDataForPatch, _importer).Scan();
 
-        foreach (var (_, methodData) in assemblyDataForPatch.patchDllData.allMethods)
+        foreach(var instData in genMethodInstDatas)
         {
-            var method = methodData.definition;
-            if (!method.HasGenericParameters)
-                continue;
+            if (instData.typeGenArgs.Count != instData.methodGenArgs.Count)
+                throw new Exception($"invalid argType count between typeArgs and methodArgs:{instData.genericMethodInBase.FullName}");
 
-            AddCAGenericIndex(method, _wrapperIndex);
-            var wrapperMethod = Utils.GenWrapperMethodBody(method, _wrapperIndex, wrapperClass, typeSigs, typeSigs);
-            AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeSigs.ToArray());
+            AddCAGenericIndex(instData.genericMethodInPatch, _wrapperIndex);
+            for (int i = 0, imax = instData.typeGenArgs.Count; i < imax; i++)
+            {
+                var typeGenArgs = instData.typeGenArgs[i];
+                var methodGenArgs = instData.methodGenArgs[i];
 
+                var wrapperMethod = Utils.GenWrapperMethodBody(instData.genericMethodInBase, _wrapperIndex, i, _importer, wrapperClass, typeGenArgs, methodGenArgs);
+                AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeGenArgs, methodGenArgs);
+            }
             _wrapperIndex++;
         }
     }
@@ -238,19 +242,22 @@ public class AssemblyPatcher
     /// <summary>
     /// 给wrapper方法添加 [GenericMethodWrapper]
     /// </summary>
-    void AddCAGenericMethodWrapper(MethodDef method, int idx, TypeSig[] types)
+    void AddCAGenericMethodWrapper(MethodDef method, int idx, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
     {
-        CANamedArgument nameArgTypes = null;
-        if (types != null && types.Length > 0)
+        List<CAArgument> caTypes = new List<CAArgument>();
+
+        foreach (var t in typeGenArgs)
         {
-            List<CAArgument> caTypes = new List<CAArgument>();
-            foreach (var t in types)
-            {
-                caTypes.Add(new CAArgument(_typeTypeSig, t));
-            }
-            var argTypes = new CAArgument(_typeArrayTypeSig, caTypes);
-            nameArgTypes = new CANamedArgument(true, _typeArrayTypeSig, "typeGenArgs", argTypes);
+            caTypes.Add(new CAArgument(_typeTypeSig, t));
         }
+
+        foreach (var t in methodGenArgs)
+        {
+            caTypes.Add(new CAArgument(_typeTypeSig, t));
+        }
+
+        var argTypes = new CAArgument(_typeArrayTypeSig, caTypes);
+        var nameArgTypes = new CANamedArgument(true, _typeArrayTypeSig, "typeGenArgs", argTypes);
 
         AddCAGenericMethodWrapper(method, idx, nameArgTypes);
     }
@@ -282,15 +289,6 @@ public class AssemblyPatcher
         File.Move(tmpPath, patchPath);
         File.Move(tmpPdbPath, patchPdbPath);
     }
+
+
 }
-
-//class TypeDefComparer<T> : IComparer<T> where T : MemberRef
-//{
-//    public static TypeDefComparer<T> comparer = new TypeDefComparer<T>();
-
-//    public int Compare(T x, T y)
-//    {
-//        return x.FullName.CompareTo(y.FullName);
-//    }
-//}
-
