@@ -219,7 +219,7 @@ public class AssemblyPatcher
                 var typeGenArgs = instData.typeGenArgs[i];
                 var methodGenArgs = instData.methodGenArgs[i];
 
-                var wrapperMethod = Utils.GenWrapperMethodBody(instData.genericMethodInBase, _wrapperIndex, i, _importer, wrapperClass, typeGenArgs, methodGenArgs);
+                var wrapperMethod = Utils.GenWrapperMethodBody(instData.genericMethodInPatch, _wrapperIndex, i, _importer, wrapperClass, typeGenArgs, methodGenArgs);
                 AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeGenArgs, methodGenArgs);
             }
             _wrapperIndex++;
