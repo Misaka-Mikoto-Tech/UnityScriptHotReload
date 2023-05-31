@@ -73,11 +73,13 @@ public class AssemblyPatcher
     private CorLibTypeSig   _objectTypeSig;
     private TypeSig         _typeTypeSig;
     private TypeSig         _typeArrayTypeSig;
+    private TypeSig         _methodBaseTypeSig;
+
+    private TypeDef         _wrapperClass;
 
     private Importer            _importer;
     private MethodPatcher       _methodPatcher;
     private GenericInstScanner  _genericInstScanner;
-    private TypeDef             _wrapperClass;
 
     static AssemblyPatcher()
     {
@@ -106,11 +108,14 @@ public class AssemblyPatcher
         _objectTypeSig = patchDllDef.CorLibTypes.Object;
         _typeTypeSig = patchDllDef.Import(typeof(Type)).ToTypeSig();
         _typeArrayTypeSig = new SZArraySig(_typeTypeSig);
+        
 
         _ctorGenericMethodIndex = patchDllDef.Import(_typeGenericMethodIndex.definition.FindDefaultConstructor());
         _ctorGenericMethodWrapper = patchDllDef.Import(_typeGenericMethodWrapper.definition.FindDefaultConstructor());
 
         _importer = new Importer(assemblyDataForPatch.patchDllData.moduleDef);
+        _methodBaseTypeSig = _importer.ImportAsTypeSig(typeof(MethodBase));
+
         _methodPatcher = new MethodPatcher(assemblyDataForPatch, _importer);
         _genericInstScanner = new GenericInstScanner(assemblyDataForPatch, _importer);
 
@@ -223,8 +228,8 @@ public class AssemblyPatcher
                 var typeGenArgs = genInstArgs[i].typeGenArgs;
                 var methodGenArgs = genInstArgs[i].methodGenArgs;
 
-                var wrapperMethod = Utils.GenWrapperMethodBody(genMethodData.genericMethodInPatch, _wrapperIndex, i, _importer, _wrapperClass, typeGenArgs, methodGenArgs);
-                AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeGenArgs, methodGenArgs);
+                var (wrapperMethod, instTarget) = Utils.GenWrapperMethodBody(genMethodData.genericMethodInPatch, _wrapperIndex, i, _importer, _wrapperClass, typeGenArgs, methodGenArgs);
+                AddCAGenericMethodWrapper(wrapperMethod, instTarget, _wrapperIndex, typeGenArgs, methodGenArgs);
                 genInstArgs[i].wrapperMethodDef = wrapperMethod; // 记录 wrapperMethodDef 定义
             }
             _wrapperIndex++;
@@ -247,7 +252,7 @@ public class AssemblyPatcher
     /// <summary>
     /// 给wrapper方法添加 [GenericMethodWrapper]
     /// </summary>
-    void AddCAGenericMethodWrapper(MethodDef method, int idx, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    void AddCAGenericMethodWrapper(MethodDef wrapperMethod, IMethod instTarget, int idx, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
     {
         List<CAArgument> caTypes = new List<CAArgument>();
 
@@ -264,16 +269,20 @@ public class AssemblyPatcher
         var argTypes = new CAArgument(_typeArrayTypeSig, caTypes);
         var nameArgTypes = new CANamedArgument(true, _typeArrayTypeSig, "typeGenArgs", argTypes);
 
-        AddCAGenericMethodWrapper(method, idx, nameArgTypes);
+        AddCAGenericMethodWrapper(wrapperMethod, instTarget, idx, nameArgTypes);
     }
 
-    void AddCAGenericMethodWrapper(MethodDef method, int idx, CANamedArgument typeArgs)
+    void AddCAGenericMethodWrapper(MethodDef wrapperMethod, IMethod instTarget, int idx, CANamedArgument typeArgs)
     {
         var argIdx = new CAArgument(_int32TypeSig, idx);
         var nameArgIdx = new CANamedArgument(true, _int32TypeSig, "index", argIdx);
+
+        var instArg = new CAArgument(_methodBaseTypeSig, instTarget);
+        var nameInstArg = new CANamedArgument(true, _methodBaseTypeSig, "genericInstMethod", instArg);
+        //var caArgs  = new CANamedArgument[] { nameArgIdx, nameInstArg, typeArgs };
         var caArgs  = new CANamedArgument[] { nameArgIdx, typeArgs };
         var ca = new CustomAttribute(_ctorGenericMethodWrapper, caArgs);
-        method.CustomAttributes.Add(ca);
+        wrapperMethod.CustomAttributes.Add(ca);
     }
 
     public class DictionaryDefInfos

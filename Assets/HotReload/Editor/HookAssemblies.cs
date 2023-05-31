@@ -37,9 +37,6 @@ namespace ScriptHotReload
             List<MethodBase> methodsOfTypePatch = new List<MethodBase>();
             List<MethodBase> methodsOfTypeOri = new List<MethodBase>();
 
-            Type wrapperType = null;
-            // 类型或者类型内定义的方法包含泛型参数的类型集合
-            Dictionary<Type, Type> genericTypes = new Dictionary<Type, Type>();
             foreach (var kv in dicTypesPatch)
             {
                 Type patchType = kv.Value;
@@ -52,21 +49,15 @@ namespace ScriptHotReload
                 if (patchType.FullName.Contains("<>c"))
                     continue;
 
-                if(patchType.FullName == "ScriptHotReload.<>__GenericInstWrapper__")
-                {
-                    wrapperType = patchType;
+                if(patchType.FullName == "ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__")
                     continue;
-                }
 
                 Type oriType;
                 if (!dicTypesOri.TryGetValue(kv.Key, out oriType))
                     continue; // patch中新增的类型
 
                 if (oriType.ContainsGenericParameters) // 第一遍只处理非泛型类型
-                {
-                    genericTypes.Add(oriType, patchType);
                     continue;
-                }
 
                 methodsOfTypeOri.Clear();
                 methodsOfTypePatch.Clear();
@@ -81,13 +72,10 @@ namespace ScriptHotReload
                     if (miPatch.Name == ".cctor")
                         continue;
 
-                    if(miPatch.ContainsGenericParameters) // 所属类型无泛型，但函数包含泛型的也添加进集合
-                    {
-                        genericTypes.TryAdd(oriType, patchType);
+                    if(miPatch.ContainsGenericParameters) // 所属类型无泛型，但函数包含泛型的也算泛型类型
                         continue;
-                    }
 
-                    string sig = miPatch.ToString(); // "T TestG[T](T)"
+                    string sig = miPatch.ToString();
                     var miOri = methodsOfTypeOri.Find(m => m.ToString() == sig);
                     if (miOri != null)
                     {
@@ -98,11 +86,8 @@ namespace ScriptHotReload
                 }
             }
 
-            // 处理泛型方法
-            if (wrapperType == null)
-                throw new Exception("can not find wrapper type");
-            // 收集并构建实例化后的hook方法映射数据
-            var genericInstHookPairs = GenGenericInstHookPairs(wrapperType, genericTypes);
+            // 从patch dll内获取提前生成好的，并构建实例化后的hook方法映射字典
+            var genericInstHookPairs = GetGenericMethodInstDic(patch);
             foreach (var genericInst in genericInstHookPairs)
                 methodsToHook.Add(genericInst.Key, genericInst.Value);
 
@@ -131,142 +116,13 @@ namespace ScriptHotReload
             }
         }
 
-
-        class WrapperItem
-        {
-            public MethodBase wrapperMethod;
-            public Type[] typeGenArgs;
-        }
-
-        class WrapperData
-        {
-            public int idx;
-            public MethodBase genericMethodOri; // 原始dll内的泛型方法
-            public List<WrapperItem> wrappers = new List<WrapperItem>();
-        }
-
         /// <summary>
-        /// 获取patch dll里自动生成的wrapper函数数据
+        /// 获取 patch dll 内预先生成的需要hook的泛型实例字典
         /// </summary>
-        /// <param name="wrapperType"></param>
-        /// <param name="genericTypes">key:oriType, value:patchType</param>
         /// <returns></returns>
-        static List<WrapperData> CollectMethodWrappers(Type wrapperType, Dictionary<Type, Type> genericTypes)
+        static Dictionary<MethodBase, MethodBase> GetGenericMethodInstDic(Assembly patch)
         {
-            var dicWrapperData = new Dictionary<int, WrapperData>();
 
-            {// 收集 patch dll 内的 wrapper 定义
-                var mis = wrapperType.GetMethods(BindingFlags.Static | BindingFlags.Public);
-                foreach (var m in mis)
-                {
-                    var wrapperAttr = m.GetCustomAttribute<GenericMethodWrapperAttribute>();
-                    if (wrapperAttr == null)
-                        continue;
-
-                    if (!dicWrapperData.TryGetValue(wrapperAttr.index, out var wrapper))
-                    {
-                        wrapper = new WrapperData() { idx = wrapper.idx };
-                        dicWrapperData.Add(wrapper.idx, wrapper);
-                    }
-                    wrapper.wrappers.Add(new WrapperItem() { wrapperMethod = m, typeGenArgs = wrapperAttr.typeGenArgs });
-                }
-            }
-
-            // 扫描wrapper对应的泛型定义
-            foreach(var (typeOri, typePatch) in genericTypes)
-            {
-                if (typePatch.Name.Contains("<>c") || typePatch == wrapperType) // lambda 表达式的自动生成类
-                    continue;
-
-                List<MethodBase> misOri = new List<MethodBase>();
-                List<MethodBase> misPatch = new List<MethodBase>();
-                var flags = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                misOri.AddRange(typeOri.GetConstructors(flags));
-                misOri.AddRange(typeOri.GetMethods(flags));
-                misPatch.AddRange(typePatch.GetConstructors(flags));
-                misPatch.AddRange(typePatch.GetMethods(flags));
-
-                foreach (var mPatch in misPatch)
-                {
-                    var idxAttr = mPatch.GetCustomAttribute<GenericMethodIndexAttribute>();
-                    if (idxAttr == null)
-                        continue;
-
-                    if (!dicWrapperData.TryGetValue(idxAttr.index, out var wrapper))
-                        throw new Exception($"can not find wrapper data with idx:{idxAttr.index}");
-
-                    string mSig = mPatch.ToString();
-                    foreach (var mOri in misOri) // 找出原始 dll 内的同名泛型方法
-                    {
-                        if(mOri.ToString() == mSig)
-                        {
-                            wrapper.genericMethodOri = mOri;
-                            break;
-                        }
-                    }
-                }
-            }
-            return dicWrapperData.Values.ToList();
-        }
-
-        /// <summary>
-        /// 构建泛型方法hook相关的方法对
-        /// </summary>
-        /// <param name="wrapperDatas"></param>
-        /// <returns></returns>
-        static Dictionary<MethodBase, MethodBase> GenGenericInstHookPairs(Type wrapperType, Dictionary<Type, Type> genericTypes)
-        {
-            var ret = new Dictionary<MethodBase, MethodBase>();
-
-            List<WrapperData> wrapperDatas = CollectMethodWrappers(wrapperType, genericTypes);
-
-            foreach(var wrapperData in wrapperDatas)
-            {
-                MethodBase genericMethodOri = wrapperData.genericMethodOri;
-                Type type = genericMethodOri.DeclaringType;
-
-                Type[] genTypeArgs = type.GetGenericArguments();
-                Type[] genMethodArgs = genericMethodOri.GetGenericArguments();
-
-                int typeGenCnt = type.GenericTypeArguments.Length;
-                int methodGenCnt = genericMethodOri.GetGenericArguments().Length;
-
-                foreach (var wrapper in wrapperData.wrappers)
-                {
-                    Type finalType = type;
-                    MethodBase finallyMi = genericMethodOri;
-                    if (typeGenCnt > 0)
-                    {
-                        for (int i = 0, imax = genTypeArgs.Length; i < imax; i++)
-                            genTypeArgs[i] = wrapper.typeGenArgs[i];
-                        finalType = type.MakeGenericType(genTypeArgs);
-
-                        // 实例化的类型内的方法 MetadataToken 不变，因此可以通过此值匹配
-                        int mdToken = finallyMi.MetadataToken;
-                        if (finallyMi is ConstructorInfo)
-                            finallyMi = (from m in finalType.GetConstructors(GetBindingFlags(finallyMi))
-                                         where m.MetadataToken == mdToken
-                                         select m).First();
-                        else
-                            finallyMi = (from m in finalType.GetMethods(GetBindingFlags(finallyMi))
-                                     where m.MetadataToken == mdToken
-                                         select m).First();
-                    }
-
-                    if (methodGenCnt > 0 && (genericMethodOri is not ConstructorInfo)) // 没有泛型构造方法这种东西
-                    {
-                        for (int i = 0, imax = genMethodArgs.Length; i < imax; i++)
-                            genMethodArgs[i] = wrapper.typeGenArgs[typeGenCnt + i];
-                        finallyMi = (genericMethodOri as MethodInfo).MakeGenericMethod(genMethodArgs);
-                    }
-
-                    if (finallyMi.ContainsGenericParameters)
-                        throw new Exception($"instantiate method fail:{finallyMi}");
-
-                    ret.Add(finallyMi, wrapper.wrapperMethod);
-                }
-            }
-            return ret;
         }
 
         static BindingFlags GetBindingFlags(MethodBase srcMethod)

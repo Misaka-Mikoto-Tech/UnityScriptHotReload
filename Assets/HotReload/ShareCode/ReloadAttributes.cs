@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace ScriptHotReload
@@ -22,6 +23,10 @@ namespace ScriptHotReload
         /// 配对索引，与 HookWrapperGenericAttribute 相同，可以多对一
         /// </summary>
         public int index;
+        /// <summary>
+        /// wrapper 函数关联的泛型方法实例
+        /// </summary>
+        public MethodBase genericInstMethod;
         /// <summary>
         /// 方法所属的泛型类型的类型参数列表 + 泛型方法的类型参数列表
         /// </summary>

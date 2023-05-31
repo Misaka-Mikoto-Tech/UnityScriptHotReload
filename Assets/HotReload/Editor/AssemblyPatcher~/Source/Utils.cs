@@ -287,7 +287,7 @@ public static class Utils
     /// <param name="wrapper"></param>
     /// <param name="target"></param>
     /// <returns></returns>
-    public static MethodDef GenWrapperMethodBody(MethodDef method, int idx, int idx2, Importer importer, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
+    public static (MethodDef wrapper, IMethod instTarget) GenWrapperMethodBody(MethodDef method, int idx, int idx2, Importer importer, TypeDef wrapperType, IList<TypeSig> typeGenArgs, IList<TypeSig> methodGenArgs)
     {
         (MethodDef wrapper, IMethod target) = GetWrapperMethodInfo(method, idx, idx2, importer, wrapperType, typeGenArgs, methodGenArgs);
 
@@ -313,7 +313,7 @@ public static class Utils
 
         instructions.Add(Instruction.Create(OpCodes.Call, target));
         instructions.Add(Instruction.Create(OpCodes.Ret));
-        return wrapper;
+        return (wrapper, target);
     }
 
     /// <summary>
