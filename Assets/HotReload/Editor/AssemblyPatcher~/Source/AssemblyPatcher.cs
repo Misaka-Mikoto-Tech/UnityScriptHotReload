@@ -25,6 +25,11 @@ using dnlib.DotNet.MD;
 using Remotion.Linq.Parsing.Structure.NodeTypeProviders;
 using dnlib.DotNet.Writer;
 using System.Diagnostics;
+using MethodImplAttributes = dnlib.DotNet.MethodImplAttributes;
+using System.Xml.Linq;
+using MethodAttributes = dnlib.DotNet.MethodAttributes;
+using NHibernate.Mapping.ByCode;
+using System.Runtime.Loader;
 
 namespace AssemblyPatcher;
 
@@ -62,6 +67,7 @@ public class AssemblyPatcher
 
     private MemberRef _ctorGenericMethodIndex, _ctorGenericMethodWrapper;
 
+    private CorLibTypeSig   _voidTypeSig;
     private CorLibTypeSig   _int32TypeSig;
     private CorLibTypeSig   _stringTypeSig;
     private CorLibTypeSig   _objectTypeSig;
@@ -70,6 +76,8 @@ public class AssemblyPatcher
 
     private Importer            _importer;
     private MethodPatcher       _methodPatcher;
+    private GenericInstScanner  _genericInstScanner;
+    private TypeDef             _wrapperClass;
 
     static AssemblyPatcher()
     {
@@ -92,6 +100,7 @@ public class AssemblyPatcher
             return false;
 
         var patchDllDef = assemblyDataForPatch.patchDllData.moduleDef;
+        _voidTypeSig = patchDllDef.CorLibTypes.Void;
         _int32TypeSig = patchDllDef.CorLibTypes.Int32;
         _stringTypeSig = patchDllDef.CorLibTypes.String;
         _objectTypeSig = patchDllDef.CorLibTypes.Object;
@@ -103,9 +112,16 @@ public class AssemblyPatcher
 
         _importer = new Importer(assemblyDataForPatch.patchDllData.moduleDef);
         _methodPatcher = new MethodPatcher(assemblyDataForPatch, _importer);
+        _genericInstScanner = new GenericInstScanner(assemblyDataForPatch, _importer);
+
+        _wrapperClass = assemblyDataForPatch.patchDllData.types["ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__"].definition;
+
+        // 扫描原始 dll 中的所有泛型实例
+        _genericInstScanner.Scan();
 
         FixNewAssembly();
         GenGenericMethodWrappers();
+        GenRuntimeGenericInstMethodInfosGetFunc();
         isValid = true;
         return isValid;
     }
@@ -198,29 +214,18 @@ public class AssemblyPatcher
     /// </summary>
     void GenGenericMethodWrappers()
     {
-        // 创建wrapper函数所在的类 ScriptHotReload.<>__GenericInstWrapper__
-        var wrapperClass = new TypeDefUser("ScriptHotReload", "<>__GenericInstWrapper__");
-        wrapperClass.IsAbstract = true; // static class
-        wrapperClass.IsSealed = true;
-        
-        assemblyDataForPatch.patchDllData.moduleDef.Types.Add(wrapperClass);
-
-        // 扫描原始 dll 中的所有泛型实例
-        var genMethodInstDatas = new GenericInstScanner(assemblyDataForPatch, _importer).Scan();
-
-        foreach(var instData in genMethodInstDatas)
+        foreach(var genMethodData in _genericInstScanner.genericMethodDatas)
         {
-            if (instData.typeGenArgs.Count != instData.methodGenArgs.Count)
-                throw new Exception($"invalid argType count between typeArgs and methodArgs:{instData.genericMethodInBase.FullName}");
-
-            AddCAGenericIndex(instData.genericMethodInPatch, _wrapperIndex);
-            for (int i = 0, imax = instData.typeGenArgs.Count; i < imax; i++)
+            AddCAGenericIndex(genMethodData.genericMethodInPatch, _wrapperIndex);
+            var genInstArgs = genMethodData.genericInsts;
+            for (int i = 0, imax = genInstArgs.Count; i < imax; i++)
             {
-                var typeGenArgs = instData.typeGenArgs[i];
-                var methodGenArgs = instData.methodGenArgs[i];
+                var typeGenArgs = genInstArgs[i].typeGenArgs;
+                var methodGenArgs = genInstArgs[i].methodGenArgs;
 
-                var wrapperMethod = Utils.GenWrapperMethodBody(instData.genericMethodInPatch, _wrapperIndex, i, _importer, wrapperClass, typeGenArgs, methodGenArgs);
+                var wrapperMethod = Utils.GenWrapperMethodBody(genMethodData.genericMethodInPatch, _wrapperIndex, i, _importer, _wrapperClass, typeGenArgs, methodGenArgs);
                 AddCAGenericMethodWrapper(wrapperMethod, _wrapperIndex, typeGenArgs, methodGenArgs);
+                genInstArgs[i].wrapperMethodDef = wrapperMethod; // 记录 wrapperMethodDef 定义
             }
             _wrapperIndex++;
         }
@@ -269,6 +274,61 @@ public class AssemblyPatcher
         var caArgs  = new CANamedArgument[] { nameArgIdx, typeArgs };
         var ca = new CustomAttribute(_ctorGenericMethodWrapper, caArgs);
         method.CustomAttributes.Add(ca);
+    }
+
+    public class DictionaryDefInfos
+    {
+        public IMethod genFunc;
+
+        public TypeSig dicTypeSig;
+        public IMethod dicCtor;
+        public IMethod dicAdd;
+    }
+
+    DictionaryDefInfos GetDictionaryDefInfos()
+    {
+        var ret = new DictionaryDefInfos();
+        ret.genFunc = _wrapperClass.FindMethod("GetGenericInstMethodForPatch");
+        ret.dicTypeSig = (ret.genFunc as MethodDefMD).ReturnType; // Dictionary<MethodBase, MethodBase>
+
+        TypeSpec dicType = ret.dicTypeSig.ToTypeDefOrRef() as TypeSpec;
+
+        var genericDicType = dicType.ResolveTypeDef();
+        var genericDicCtor = genericDicType.FindDefaultConstructor();
+        var genericDicAdd = genericDicType.FindMethod("Add");
+
+        ret.dicCtor = new MemberRefUser(dicType.Module, ".ctor", genericDicCtor.MethodSig, dicType);
+        ret.dicAdd = new MemberRefUser(dicType.Module, ".Add", genericDicAdd.MethodSig, dicType);
+        return ret;
+    }
+
+    /// <summary>
+    /// 生成运行时动态获取Base Dll内的泛型实例方法与Patch Dll内的Wrapper方法关联的函数
+    /// </summary>
+    void GenRuntimeGenericInstMethodInfosGetFunc()
+    {
+        var dicDefInfos = GetDictionaryDefInfos();
+        var genFunc = dicDefInfos.genFunc.ResolveMethodDef();
+
+        genFunc.Body = new CilBody();
+        genFunc.Body.MaxStack = 4;
+        var instructions = genFunc.Body.Instructions;
+
+        instructions.Add(Instruction.Create(OpCodes.Newobj, dicDefInfos.dicCtor));    // newobj Dictionary<MethodInfo, MethodInfo>.ctor()
+        
+        foreach(var genericMethodData in _genericInstScanner.genericMethodDatas)
+        {
+            foreach(var instArgs in genericMethodData.genericInsts)
+            {
+                var importedBaseInstMethod = _importer.Import(instArgs.instMethodInBase);
+                instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseInstMethod));      // ldtoken key
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, instArgs.wrapperMethodDef));   // ldtoken value
+                instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));            // callvirt Add
+            }
+        }
+
+        instructions.Add(Instruction.Create(OpCodes.Ret));                                          // ret
     }
 
     public void WriteToFile()

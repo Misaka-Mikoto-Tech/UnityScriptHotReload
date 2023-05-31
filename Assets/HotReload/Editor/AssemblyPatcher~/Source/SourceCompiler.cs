@@ -19,7 +19,17 @@ public class SourceCompiler
     public string outputPath { get; private set; }
 
     private string _rspPath;
-    private string _assAttrPath;
+    private static string s_CS_File_Path__Patch_Assembly_Attr__;            // __Patch_Assembly_Attr__.cs
+    private static string s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__; // __Patch_GenericInst_Wrapper__Gen__.cs
+
+    static SourceCompiler()
+    {
+        s_CS_File_Path__Patch_Assembly_Attr__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_Assembly_Attr__.cs";
+        s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_GenericInst_Wrapper__Gen__.cs";
+
+        GenCSFile__Patch_Assembly_Attr__();
+        GenCSFile__Patch_GenericInst_Wrapper__Gen__();
+    }
     
     public SourceCompiler(string moduleName)
     {
@@ -32,16 +42,17 @@ public class SourceCompiler
         File.Delete(outputPath);
         File.Delete(Path.ChangeExtension(outputPath, ".pdb"));
 
-        _rspPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch.rsp";
-        _assAttrPath = GlobalConfig.Instance.tempScriptDir + $"/_{moduleName}_Patch_Attr.cs";
-
-        GenAssemblyAttributesFile();
+        _rspPath = GlobalConfig.Instance.tempScriptDir + $"/__{moduleName}_Patch.rsp";
+        
         GenRspFile();
         int retCode = RunDotnetCompileProcess();
         return retCode;
     }
 
-    void GenAssemblyAttributesFile()
+    /// <summary>
+    /// 创建文件 __Patch_Assembly_Attr__.cs
+    /// </summary>
+    static void GenCSFile__Patch_Assembly_Attr__()
     {
         var sb = new StringBuilder();
         sb.AppendLine("using System;");
@@ -60,7 +71,39 @@ public class SourceCompiler
         sb.AppendLine("[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]");
 #endif
 
-        File.WriteAllText(_assAttrPath, sb.ToString(), Encoding.UTF8);
+        File.WriteAllText(s_CS_File_Path__Patch_Assembly_Attr__, sb.ToString(), Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 创建文件 __Patch_GenericInst_Wrapper__Gen__.cs
+    /// </summary>
+    static void GenCSFile__Patch_GenericInst_Wrapper__Gen__()
+    {
+        string text = 
+@"using System;
+using System.Collections.Generic;
+using System.Reflection;
+
+namespace ScriptHotReload
+{
+    /// <summary>
+    /// 用于 AssemblyPatcher 生成泛型实例定义的 wrapper 类型
+    /// </summary>
+    public class __Patch_GenericInst_Wrapper__Gen__
+    {
+        /// <summary>
+        /// 扫描 base dll 里所有的泛型实例，然后获取与之关联的 patch dll 内创建的 wrapper 函数
+        /// </summary>
+        /// <returns></returns>
+        public static Dictionary<MethodBase, MethodBase> GetGenericInstMethodForPatch()
+        {
+            // 函数体会被 Assembly Patcher 替换
+            throw new NotImplementedException();
+        }
+    }
+}
+";
+        File.WriteAllText(s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__, text, Encoding.UTF8);
     }
 
     void GenRspFile()
@@ -96,8 +139,9 @@ public class SourceCompiler
         sb.AppendLine("/utf8output");
         sb.AppendLine("/preferreduilang:en-US");
 
-        sb.AppendLine($"\"{_assAttrPath}\"");
-        foreach(var src in GlobalConfig.Instance.filesToCompile[moduleName])
+        sb.AppendLine($"\"{s_CS_File_Path__Patch_Assembly_Attr__}\"");
+        sb.AppendLine($"\"{s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__}\"");
+        foreach (var src in GlobalConfig.Instance.filesToCompile[moduleName])
             sb.AppendLine($"\"{src}\"");
 
         File.WriteAllText(_rspPath, sb.ToString(), Encoding.UTF8);

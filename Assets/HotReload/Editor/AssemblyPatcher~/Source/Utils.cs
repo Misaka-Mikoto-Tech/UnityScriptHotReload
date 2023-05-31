@@ -307,7 +307,7 @@ public static class Utils
                 case 3:
                     instructions.Add(Instruction.Create(OpCodes.Ldarg_3)); break;
                 default:
-                    instructions.Add(Instruction.Create(OpCodes.Ldarga_S, wrapper.Parameters[i])); break;
+                    instructions.Add(Instruction.Create(OpCodes.Ldarg_S, wrapper.Parameters[i])); break;
             }
         }
 

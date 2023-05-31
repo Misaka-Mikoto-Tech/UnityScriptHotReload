@@ -7,7 +7,7 @@ namespace AssemblyPatcher;
 /// <summary>
 /// 记录从MetaData扫描到的需要hook的泛型方法定义及实例信息
 /// </summary>
-public class MethodInstData
+public class ScannedMethodInfo
 {
     /// <summary>
     /// MemberRef or MethodSpec
@@ -25,19 +25,34 @@ public class MethodInstData
     public override string ToString() => method.ToString();
 }
 
-public class GenericInstData
+/// <summary>
+/// 泛型实例参数
+/// </summary>
+public class GenericInstArgs
+{
+    public List<TypeSig> typeGenArgs = new List<TypeSig>();
+    public List<TypeSig> methodGenArgs = new List<TypeSig>();
+    public IMethod instMethodInBase;
+
+    public MethodDef wrapperMethodDef; // wrapper 函数生成后填充
+}
+
+/// <summary>
+/// 泛型方法的相关数据（记录的所有实例等数据）
+/// </summary>
+public class GenericMethodData
 {
     public MethodDef genericMethodInBase;
     public MethodDef genericMethodInPatch;
     /// <summary>
     /// 所有实现此泛型定义的所有实例（引用类型已被合并为 System.Object, 其它类型改为通过 Import 替换为Patch dll 内的 TypeSig）
     /// </summary>
-    public List<List<TypeSig>> typeGenArgs = new List<List<TypeSig>>();
-    public List<List<TypeSig>> methodGenArgs = new List<List<TypeSig>>();
+    public List<GenericInstArgs> genericInsts = new List<GenericInstArgs>();
+
     /// <summary>
     /// 原始泛型实例数据，一般仅用于调试
     /// </summary>
-    public List<MethodInstData> instMethods = new List<MethodInstData>();
+    public List<ScannedMethodInfo> instMethodsScanned = new List<ScannedMethodInfo>();
 
     public override string ToString() => genericMethodInBase.ToString();
 }
@@ -47,12 +62,14 @@ public class GenericInstData
 /// </summary>
 public class GenericInstScanner
 {
-    private AssemblyDataForPatch _assemblyDataForPatch;
-    private ModuleDefMD _baseModuleDef;
-    private Dictionary<string, MethodDef> _gernericMethodFilter; // 需要过滤的方法，value: 泛型定义
-    Importer _importer;
+    public List<GenericMethodData> genericMethodDatas { get; private set; } = new List<GenericMethodData>();
 
-    private List<MethodInstData> _methodInstDatas = new List<MethodInstData>();
+    private AssemblyDataForPatch    _assemblyDataForPatch;
+    private ModuleDefMD             _baseModuleDef;
+    private Dictionary<string, MethodDef> _gernericMethodFilter; // 需要过滤的方法，value: Patch dll内的包含泛型的方法定义
+    Importer    _importer;
+
+    private List<ScannedMethodInfo> _scannedMethodInfos = new List<ScannedMethodInfo>();
 
     /// <summary>
     /// 泛型实例扫描器
@@ -70,7 +87,7 @@ public class GenericInstScanner
     /// 扫描出 base dll 内泛型方法定义及其所有的不包含泛型参数的实例
     /// </summary>
     /// <returns></returns>
-    public List<GenericInstData> Scan()
+    public void Scan()
     {
         _gernericMethodFilter = new Dictionary<string, MethodDef>();
         foreach (var (_, methodData) in _assemblyDataForPatch.patchDllData.allMethods)
@@ -80,13 +97,12 @@ public class GenericInstScanner
                 _gernericMethodFilter.Add(method.FullName, method.ResolveMethodDef());
         }
 
-        _methodInstDatas.Clear();
+        _scannedMethodInfos.Clear();
         ScanMethodDefFromMetaData();
         ScanMethodInstFromMetaData();
 
         // 整理泛型实例数据
-        var ret = MergeAndImportGenericInstDatas();
-        return ret;
+        genericMethodDatas = MergeAndImportGenericInstDatas();
     }
 
     /// <summary>
@@ -129,12 +145,12 @@ public class GenericInstScanner
             {
                 var sig = typeSpec.TypeSig as GenericInstSig;
 
-                var instData = new MethodInstData();
+                var instData = new ScannedMethodInfo();
                 instData.method = mr;
                 instData.genericMethodInBase = resoledMethod;
                 instData.genericMethodInPatch = patchMethodDef;
                 instData.typeGenArgs.AddRange(sig.GenericArguments);
-                _methodInstDatas.Add(instData);
+                _scannedMethodInfos.Add(instData);
             }
         }
     }
@@ -167,7 +183,7 @@ public class GenericInstScanner
             var fullName = resolvedMethod.FullName;
             if (_gernericMethodFilter.TryGetValue(fullName, out var patchMethodDef))
             {
-                var instData = new MethodInstData();
+                var instData = new ScannedMethodInfo();
                 instData.method = ms;
                 instData.genericMethodInBase = resolvedMethod;
                 instData.genericMethodInPatch = patchMethodDef;
@@ -177,7 +193,7 @@ public class GenericInstScanner
 
                 instData.methodGenArgs.AddRange(methodSig.GenericArguments);
 
-                _methodInstDatas.Add(instData);
+                _scannedMethodInfos.Add(instData);
             }
         }
     }
@@ -186,38 +202,38 @@ public class GenericInstScanner
     /// 合并并导入泛型实例数据
     /// </summary>
     /// <returns></returns>
-    List<GenericInstData> MergeAndImportGenericInstDatas()
+    List<GenericMethodData> MergeAndImportGenericInstDatas()
     {
-        var ret = new Dictionary<MethodDef, GenericInstData>();
+        var ret = new Dictionary<MethodDef, GenericMethodData>(); // key: genericMethodInBase
         // 合并 GenericMethod
-        foreach (var instData in _methodInstDatas)
+        foreach (var methodInfo in _scannedMethodInfos)
         {
-            if (!ret.TryGetValue(instData.genericMethodInBase, out var genericInstData))
+            if (!ret.TryGetValue(methodInfo.genericMethodInBase, out var genericMethodData))
             {
-                genericInstData = new GenericInstData();
-                genericInstData.genericMethodInBase = instData.genericMethodInBase;
-                genericInstData.genericMethodInPatch = instData.genericMethodInPatch;
-                ret.Add(instData.genericMethodInBase, genericInstData);
+                genericMethodData = new GenericMethodData();
+                genericMethodData.genericMethodInBase = methodInfo.genericMethodInBase;
+                genericMethodData.genericMethodInPatch = methodInfo.genericMethodInPatch;
+                ret.Add(methodInfo.genericMethodInBase, genericMethodData);
             }
-            genericInstData.instMethods.Add(instData);
+            genericMethodData.instMethodsScanned.Add(methodInfo);
         }
 
-        var uniqueArgsDic = new Dictionary<string, (List<TypeSig> typeSigs, List<TypeSig> methodSigs)>();
+        var uniqueArgsHash = new HashSet<string>();
         StringBuilder sb = new StringBuilder();
         var objectTypeSig = _assemblyDataForPatch.patchDllData.moduleDef.CorLibTypes.Object;
 
         // 合并System.Object的类型
-        foreach (var genInstData in ret.Values)
+        foreach (var genMethodData in ret.Values)
         {
-            uniqueArgsDic.Clear();
+            uniqueArgsHash.Clear();
             List<TypeSig> typeSigs = new List<TypeSig>();
             List<TypeSig> methodSigs = new List<TypeSig>();
-            foreach (var instData in genInstData.instMethods)
+            foreach (var instScanned in genMethodData.instMethodsScanned)
             {
                 sb.Clear();
                 typeSigs.Clear();
                 methodSigs.Clear();
-                foreach(var tSig in instData.typeGenArgs)
+                foreach(var tSig in instScanned.typeGenArgs)
                 {
                     TypeSig newSig = tSig;
                     if (!tSig.IsValueType)
@@ -228,7 +244,7 @@ public class GenericInstScanner
                     sb.Append(newSig.ToString()).Append(",\t");
                     typeSigs.Add(newSig);
                 }
-                foreach (var tSig in instData.methodGenArgs)
+                foreach (var tSig in instScanned.methodGenArgs)
                 {
                     TypeSig newSig = tSig;
                     if (!tSig.IsValueType)
@@ -240,10 +256,16 @@ public class GenericInstScanner
                     methodSigs.Add(newSig);
                 }
 
-                uniqueArgsDic.TryAdd(sb.ToString(), (typeSigs, methodSigs));
+                if(!uniqueArgsHash.Contains(sb.ToString()))
+                {
+                    uniqueArgsHash.Add(sb.ToString());
+                    var genInstArgs = new GenericInstArgs();
+                    genInstArgs.typeGenArgs = typeSigs;
+                    genInstArgs.methodGenArgs = methodSigs;
+                    genInstArgs.instMethodInBase = instScanned.method;
+                    genMethodData.genericInsts.Add(genInstArgs);
+                }
             }
-            genInstData.typeGenArgs.AddRange(from sigs in uniqueArgsDic.Values select sigs.typeSigs);
-            genInstData.methodGenArgs.AddRange(from sigs in uniqueArgsDic.Values select sigs.methodSigs);
         }
 
         return ret.Values.ToList();

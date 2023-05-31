@@ -94,7 +94,14 @@ internal class Program
         }
         catch(Exception ex)
         {
-            Debug.LogError($"Patch Fail:{ex.Message}, stack:{ex.StackTrace}");
+            var msg = ex.Message;
+            var stackTrace = ex.StackTrace;
+            if (ex.InnerException != null)
+            {
+                msg += ex.InnerException.Message;
+                stackTrace = ex.InnerException.StackTrace + ex.StackTrace;
+            }
+            Debug.LogError($"Patch Fail:{msg}, stack:{stackTrace}");
         }
         sw.Stop();
         Debug.LogDebug($"执行Patch耗时 {sw.ElapsedMilliseconds} ms");
