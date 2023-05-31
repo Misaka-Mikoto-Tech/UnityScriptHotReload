@@ -278,18 +278,18 @@ public class AssemblyPatcher
 
     public class DictionaryDefInfos
     {
-        public IMethod genFunc;
+        public MethodDef genFuncDef;
 
-        public TypeSig dicTypeSig;
-        public IMethod dicCtor;
-        public IMethod dicAdd;
+        public TypeSig  dicTypeSig;
+        public IMethod  dicCtor;
+        public IMethod  dicAdd;
     }
 
     DictionaryDefInfos GetDictionaryDefInfos()
     {
         var ret = new DictionaryDefInfos();
-        ret.genFunc = _wrapperClass.FindMethod("GetGenericInstMethodForPatch");
-        ret.dicTypeSig = (ret.genFunc as MethodDefMD).ReturnType; // Dictionary<MethodBase, MethodBase>
+        ret.genFuncDef = _wrapperClass.FindMethod("GetGenericInstMethodForPatch");
+        ret.dicTypeSig = ret.genFuncDef.ReturnType; // Dictionary<MethodBase, MethodBase>
 
         TypeSpec dicType = ret.dicTypeSig.ToTypeDefOrRef() as TypeSpec;
 
@@ -298,7 +298,7 @@ public class AssemblyPatcher
         var genericDicAdd = genericDicType.FindMethod("Add");
 
         ret.dicCtor = new MemberRefUser(dicType.Module, ".ctor", genericDicCtor.MethodSig, dicType);
-        ret.dicAdd = new MemberRefUser(dicType.Module, ".Add", genericDicAdd.MethodSig, dicType);
+        ret.dicAdd = new MemberRefUser(dicType.Module, "Add", genericDicAdd.MethodSig, dicType);
         return ret;
     }
 
@@ -308,11 +308,11 @@ public class AssemblyPatcher
     void GenRuntimeGenericInstMethodInfosGetFunc()
     {
         var dicDefInfos = GetDictionaryDefInfos();
-        var genFunc = dicDefInfos.genFunc.ResolveMethodDef();
+        var genFuncDef = dicDefInfos.genFuncDef;
 
-        genFunc.Body = new CilBody();
-        genFunc.Body.MaxStack = 4;
-        var instructions = genFunc.Body.Instructions;
+        genFuncDef.Body = new CilBody();
+        genFuncDef.Body.MaxStack = 4;
+        var instructions = genFuncDef.Body.Instructions;
 
         instructions.Add(Instruction.Create(OpCodes.Newobj, dicDefInfos.dicCtor));    // newobj Dictionary<MethodInfo, MethodInfo>.ctor()
         
@@ -324,7 +324,7 @@ public class AssemblyPatcher
                 instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseInstMethod));      // ldtoken key
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, instArgs.wrapperMethodDef));   // ldtoken value
-                instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));            // callvirt Add
+                instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));         // callvirt Add
             }
         }
 
