@@ -19,6 +19,8 @@ namespace ScriptHotReload
 {
     public static class HookAssemblies
     {
+        const string kWrapperClassFullName = "ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__";
+        const string kGetGenericInstMethodForPatch = "GetGenericInstMethodForPatch";
         const string kHotReloadHookTag_Fmt = "kScriptHotReload_{0}";
 
         public static void DoHook(Assembly original, Assembly patch)
@@ -49,7 +51,7 @@ namespace ScriptHotReload
                 if (patchType.FullName.Contains("<>c"))
                     continue;
 
-                if(patchType.FullName == "ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__")
+                if(patchType.FullName == kWrapperClassFullName)
                     continue;
 
                 Type oriType;
@@ -122,7 +124,19 @@ namespace ScriptHotReload
         /// <returns></returns>
         static Dictionary<MethodBase, MethodBase> GetGenericMethodInstDic(Assembly patch)
         {
-
+            var wrapperType = patch.GetType(kWrapperClassFullName);
+            var genMi = wrapperType.GetMethod(kGetGenericInstMethodForPatch);
+            object ret;
+            try
+            {
+                ret = genMi.Invoke(null, new object[0]);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                throw;
+            }
+            return ret as Dictionary<MethodBase, MethodBase>;
         }
 
         static BindingFlags GetBindingFlags(MethodBase srcMethod)

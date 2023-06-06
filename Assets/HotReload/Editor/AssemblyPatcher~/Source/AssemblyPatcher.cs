@@ -74,6 +74,7 @@ public class AssemblyPatcher
     private TypeSig         _typeTypeSig;
     private TypeSig         _typeArrayTypeSig;
     private TypeSig         _methodBaseTypeSig;
+    private IMethodDefOrRef _getMethodFromHandle_2;
 
     private TypeDef         _wrapperClass;
 
@@ -106,6 +107,14 @@ public class AssemblyPatcher
         _int32TypeSig = patchDllDef.CorLibTypes.Int32;
         _stringTypeSig = patchDllDef.CorLibTypes.String;
         _objectTypeSig = patchDllDef.CorLibTypes.Object;
+
+        var mbType = patchDllDef.CorLibTypes.GetTypeRef("System.Reflection", "MethodBase").Resolve();
+
+        {// 使用2个参数的重载
+            var mi = from m in mbType.FindMethods("GetMethodFromHandle") where m.GetParamCount() == 2 select m;
+            _getMethodFromHandle_2 = patchDllDef.Import(mi.First());
+        }
+
         _typeTypeSig = patchDllDef.Import(typeof(Type)).ToTypeSig();
         _typeArrayTypeSig = new SZArraySig(_typeTypeSig);
         
@@ -320,7 +329,7 @@ public class AssemblyPatcher
         var genFuncDef = dicDefInfos.genFuncDef;
 
         genFuncDef.Body = new CilBody();
-        genFuncDef.Body.MaxStack = 4;
+        genFuncDef.Body.MaxStack = 8;
         var instructions = genFuncDef.Body.Instructions;
 
         instructions.Add(Instruction.Create(OpCodes.Newobj, dicDefInfos.dicCtor));    // newobj Dictionary<MethodInfo, MethodInfo>.ctor()
@@ -330,9 +339,15 @@ public class AssemblyPatcher
             foreach(var instArgs in genericMethodData.genericInsts)
             {
                 var importedBaseInstMethod = _importer.Import(instArgs.instMethodInBase);
+                var importedBaseType = _importer.Import(instArgs.instMethodInBase.DeclaringType);
+
                 instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseInstMethod));      // ldtoken key
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseType));            // ldtoken type
+                instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, instArgs.wrapperMethodDef));   // ldtoken value
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, _wrapperClass));               // ldtoken _wrapperClass
+                instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
                 instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));         // callvirt Add
             }
         }
