@@ -7,11 +7,11 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using UnityEditor;
 using UnityEngine;
 
 namespace NS_Test
 {
-
     public class NS_TestAttribute: Attribute
     {
         public int index;
@@ -139,7 +139,7 @@ namespace NS_Test
 
         public TestCls(GameObject go)
         {
-            MessageBox(IntPtr.Zero, "text0", "title0", 0);
+            EditorUtility.DisplayDialog("title0", "text0", "OK");
             int val = 0x3456;
             Action<int> act = x =>
             {
@@ -259,9 +259,6 @@ namespace NS_Test
         }
 #endif
 
-        [DllImport("user32.dll", SetLastError = false, CharSet = CharSet.Auto)]
-        public static extern int MessageBox(IntPtr hWnd, String text, String caption, uint type);
-
         public void TestGeneric()
         {
             // 测试各种当前Assembly和其它Assembly内定义的非泛型和泛型类型
@@ -301,7 +298,7 @@ namespace NS_Test
             var cls0 = new TestCls.InnerTest();
             var i000 = cls0.Inner_Normal_Func_NoG(200); // 此处不会Crash
 
-            MessageBox(IntPtr.Zero, "text1", "title1", 0);
+            EditorUtility.DisplayDialog("title1", "text1", "OK");
             int i00 = 0x3456;
 
 #if APPLY_PATCH
@@ -313,28 +310,33 @@ namespace NS_Test
             string addrStr = $"{addr:X}";
 
             var i001 = cls0.Inner_Normal_Func_WithG<TestCls>(201, null);
-            MessageBox(IntPtr.Zero, "text2", "title2", 0);
+            EditorUtility.DisplayDialog("title2", "text2", "OK");
 
             var testClsG_Normal = new TestClsG<TestCls>.TestClsGInner_Normal();
             var i0 = testClsG_Normal.Inner_Normal_Func(200);
+            EditorUtility.DisplayDialog("title3", "text3", "OK");
 
             _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             _genericFiledTest.innerField_i = 257;
             _genericFiledTest.innerField_V = new TestDll_2();
+            EditorUtility.DisplayDialog("title4", "text4", "OK");
 
             var val0 = _genericFiledTest.ShowInner(0x2345);
-            
+            EditorUtility.DisplayDialog("title5", "text5", "OK");
             var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
             var val2 = _genericFiledTest.FuncG(this, "test words", null);
-            
+            EditorUtility.DisplayDialog("title6", "text6", "OK");
 
             var tmpGenericObj = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
             Func<TestCls, string, TestDll_2, TestDll_2> funcG = tmpGenericObj.FuncG;
             var val3 = funcG(this, "test words 2", null);
             Debug.Log($"i00:{i00}");
+            EditorUtility.DisplayDialog("title7", "text7", "OK");
 
             var comp = _go.GetComponent<MonoTestA>();
             comp.ShowText();
+            EditorUtility.DisplayDialog("title8", "text8", "OK");
+
             PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
 
@@ -383,11 +385,16 @@ namespace NS_Test
 
             public int ShowInner(int x)
             {
+                EditorUtility.DisplayDialog("title4.1", "text4.1", "OK");
                 x += 0x5678;
                 GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                EditorUtility.DisplayDialog("title4.2", "text4.2", "OK");
                 go.AddComponent<MonoTestA>();
+                EditorUtility.DisplayDialog("title4.3", "text4.3", "OK");
                 var val1 = ShowGInner<long>(default(T), default(V), x);
+                EditorUtility.DisplayDialog("title4.4", "text4.4", "OK");
                 var val2 = FuncG(default(T), "abc", default(V));
+                EditorUtility.DisplayDialog("title4.5", "text4.5", "OK");
 #if !APPLY_PATCH
                 return x + 1;
 #else
@@ -397,10 +404,15 @@ namespace NS_Test
 
             public V ShowGInner<UK>(T arg0, V arg1, UK arg2)
             {
+                EditorUtility.DisplayDialog("title4.3.1", "text4.3.1", "OK");
                 Debug.Log(typeof(Func<int, bool>));
+                EditorUtility.DisplayDialog("title4.3.2", "text4.3.2", "OK");
                 Debug.Log(typeof(Func<int, V>));
+                EditorUtility.DisplayDialog("title4.3.3", "text4.3.3", "OK");
                 Debug.Log(typeof(Func<UK, V>));
+                EditorUtility.DisplayDialog("title4.3.4", "text4.3.4", "OK");
                 Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(UK).GetType()}");
+                EditorUtility.DisplayDialog("title4.3.5", "text4.3.5", "OK");
                 return arg1;
             }
 
@@ -433,7 +445,7 @@ namespace NS_Test
         public bool FuncC<U>(int y, T[] arg1, in U arg2, List<T> arg3, List<U> arg4)
         {
             Debug.Log("FuncB 1");
-            Debug.Log(arg1.GetType().FullName);
+            Debug.Log(arg1?.GetType().FullName);
             return y > 10;
         }
 
