@@ -288,7 +288,9 @@ namespace ScriptHotReload
             {
                 try
                 {
+#if PATCHER_DEBUG
                     MethodHook.onlyShowAddr = true;
+#endif
                     // patch dll 生成成功后依次对其执行hook
                     foreach (var dll in patchDlls)
                     {

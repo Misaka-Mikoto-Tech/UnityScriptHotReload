@@ -97,6 +97,16 @@ namespace NS_Test
             return xx + 1;
         }
     }
+    
+    public struct NewTestStruct
+    {
+        public int x;
+    }
+
+    public struct NewTestStruct2<T>
+    {
+        public T x;
+    }
 #endif
     public unsafe class TestCls
     {
@@ -302,6 +312,16 @@ namespace NS_Test
             int i00 = 0x3456;
 
 #if APPLY_PATCH
+            /*
+             * 测试在 patch 中使用原dll中不存在的类型实例化已有泛型
+             * 类似 List<Vector3> 这种,泛型在 mscorlib.dll 中定义，但 Vector3 在其它 dll 中定义
+             * 其代码路径全部都位于新dll中，因此无需hook
+             */
+            var testClsG2 = new TestClsG<NewTestStruct>();
+            testClsG2.t_x.x = 234;
+            testClsG2.FuncA(321);
+            EditorUtility.DisplayDialog("title1.5", "text1.5", "OK");
+
             FuncNew();
 #endif
             var miG = (from m in typeof(InnerTest).GetMethods().ToList() where m.Name.Contains("Inner_Normal_Func_WithG") select m).First();
@@ -369,6 +389,8 @@ namespace NS_Test
 
     public class TestClsG<T>
     {
+        public T t_x;
+
         public class TestClsGInner_Normal
         {
             public int val_n;

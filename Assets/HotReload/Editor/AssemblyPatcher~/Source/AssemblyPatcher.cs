@@ -149,8 +149,8 @@ public class AssemblyPatcher
         {
             /* 尝试把类型改为 interface, 以规避 mono stack walk 时从 this_obj->vtable 读取类型导致不一致的问题
              * 详见 https://github.com/Unity-Technologies/mono/blob/unity-2021.3-mbe/mono/mini/mini-exceptions.c#L835
-             * 
-             * method = jinfo_get_method(ji);
+             */ 
+             /* method = jinfo_get_method(ji);
             //if (mono_method_get_context(method)->method_inst || mini_method_is_default_method(method)) // 伪装成接口的默认实现
             //{
             //    /* A MonoMethodRuntimeGenericContext* */

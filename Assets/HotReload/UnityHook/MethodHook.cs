@@ -72,6 +72,9 @@ namespace MonoHook
     /// </summary>
     public unsafe class MethodHook
     {
+        /// <summary>
+        /// 仅显示函数指针地址，不真正执行hook，用于调试
+        /// </summary>
         public static bool onlyShowAddr = false;
         public string tag;
         public bool isHooked { get; private set; }
@@ -142,12 +145,18 @@ namespace MonoHook
 
         private static List<MethodHook> s_waitForHook = new List<MethodHook>();
 
+        /// <summary>
+        /// onlyShowAddr 为 true，但想真正执行hook操作，可以调用此方法
+        /// </summary>
         public static void ProcessWaitHooks()
         {
-            MethodHook.onlyShowAddr = false;
+            if (!onlyShowAddr)
+                return;
+
+            onlyShowAddr = false;
             foreach (var hook in s_waitForHook)
                 new MethodHook(hook.targetMethod, hook.replacementMethod, hook.proxyMethod, hook.tag).DoInstall();
-            MethodHook.s_waitForHook.Clear();
+            s_waitForHook.Clear();
         }
 
         private void ShowAddrs()
