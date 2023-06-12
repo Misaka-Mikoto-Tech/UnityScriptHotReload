@@ -35,6 +35,7 @@ public class GenericInstArgs
     public IMethod instMethodInBase;
 
     public MethodDef wrapperMethodDef; // wrapper 函数生成后填充
+    public IMethod instMethodInPatch;  // wrapper 函数生成后填充
 }
 
 /// <summary>
@@ -123,7 +124,7 @@ public class GenericInstScanner
              * MemberRef 也有可能带有泛型参数
              * eg. {NS_Test.TestDll_2 NS_Test.TestClsG`1/TestClsGInner`1<NS_Test.TestCls,NS_Test.TestDll_2>::ShowGInner<!!0>(NS_Test.TestCls,NS_Test.TestDll_2,!!0)}
              */
-            if (mr.MethodSig.ContainsGenericParameter)
+            if (mr.MethodSig.ContainsGenericParameter || mr.MethodSig.Generic)
                 continue;
 
             var declType = mr.DeclaringType;
@@ -169,7 +170,7 @@ public class GenericInstScanner
             var declType = ms.DeclaringType;
             /*
              * V NS_Test.TestClsG`1/TestClsGInner`1<T,V>::ShowGInner<System.Int64>(T,V,System.Int64)
-             * 这种带泛型参数的类型是不允许的
+             * 这种带泛型参数的类型是不允许的（但 dotnet 只记录了一级，此处没有记录调用者的泛型类型, 考虑将此类型合并进所有的其所属泛型类型内）
              */
             if (declType.ContainsGenericParameter || declType.DefinitionAssembly != assembly)
                 continue;

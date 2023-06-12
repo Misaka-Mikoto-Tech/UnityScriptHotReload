@@ -263,6 +263,7 @@ public class AssemblyPatcher
                 var (wrapperMethod, instTarget) = Utils.GenWrapperMethodBody(genMethodData.genericMethodInPatch, _wrapperIndex, i, _importer, _wrapperClass, typeGenArgs, methodGenArgs);
                 AddCAGenericMethodWrapper(wrapperMethod, instTarget, _wrapperIndex, typeGenArgs, methodGenArgs);
                 genInstArgs[i].wrapperMethodDef = wrapperMethod; // 记录 wrapperMethodDef 定义
+                genInstArgs[i].instMethodInPatch = instTarget;
             }
             _wrapperIndex++;
         }
@@ -363,13 +364,16 @@ public class AssemblyPatcher
             {
                 var importedBaseInstMethod = _importer.Import(instArgs.instMethodInBase);
                 var importedBaseType = _importer.Import(instArgs.instMethodInBase.DeclaringType);
+                var patchType = instArgs.instMethodInPatch.DeclaringType;
 
                 instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseInstMethod));      // ldtoken key
-                instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseType));            // ldtoken type
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseType));            // ldtoken key_type
                 instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, instArgs.wrapperMethodDef));   // ldtoken value
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, _wrapperClass));               // ldtoken _wrapperClass
+                //instructions.Add(Instruction.Create(OpCodes.Ldtoken, instArgs.instMethodInPatch));  // ldtoken value
+                //instructions.Add(Instruction.Create(OpCodes.Ldtoken, patchType));                   // ldtoken patchType
                 instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
                 instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));         // callvirt Add
             }
