@@ -128,7 +128,7 @@ public class AssemblyPatcher
         _methodPatcher = new MethodPatcher(assemblyDataForPatch, _importer);
         _genericInstScanner = new GenericInstScanner(assemblyDataForPatch, _importer);
 
-        _wrapperClass = assemblyDataForPatch.patchDllData.types["ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__"].definition;
+        _wrapperClass = assemblyDataForPatch.patchDllData.types[GlobalConfig.kWrapperClassFullName].definition;
 
         // 扫描原始 dll 中的所有泛型实例
         _genericInstScanner.Scan();

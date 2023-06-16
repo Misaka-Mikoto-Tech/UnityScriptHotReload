@@ -4,8 +4,20 @@ using System.Text;
 
 namespace AssemblyPatcher;
 
+/*
+ * 添加wrapper 以跳过从vtable获取类型, mini-exceptions.c#L1379
+ * 		* // actual_method might already be set by mono_arch_unwind_frame () *
+		if (!frame.actual_method) {
+			if ((unwind_options & MONO_UNWIND_LOOKUP_ACTUAL_METHOD) && frame.ji)
+				frame.actual_method = get_method_from_stack_frame(frame.ji, get_generic_info_from_stack_frame (frame.ji, &ctx));
+			else
+				frame.actual_method = frame.method;
+		}
+ */
+
 /// <summary>
 /// 记录从MetaData扫描到的需要hook的泛型方法定义及实例信息
+/// TODO metadata 内的 MethodSpec 信息不全，改为扫描IL获取
 /// </summary>
 public class ScannedMethodInfo
 {
@@ -99,6 +111,7 @@ public class GenericInstScanner
         }
 
         _scannedMethodInfos.Clear();
+        ScanTypeSpecFromMetaData();
         ScanMethodDefFromMetaData();
         ScanMethodInstFromMetaData();
 
@@ -107,7 +120,17 @@ public class GenericInstScanner
     }
 
     /// <summary>
-    /// 扫描泛型类型内的非泛型方法
+    /// 扫描泛型类型实例
+    /// （某些类似 `ClassA<T>.Func1()`，`ClassA<T>.Func2<int>()` 签名的 MethodSpec 和 MemberRef 被间接调用时无法确定类型, 只能 Cross Generate）
+    /// </summary>
+    void ScanTypeSpecFromMetaData()
+    {
+        // TODO 是否有跟踪数据流的方式确定所属真实类型(但这样需要遍历原始dll内所有的il，所以还是暴力Cross 原始dll内的实例meta更简单？)
+
+    }
+
+    /// <summary>
+    /// 扫描泛型实例类型内的非泛型方法
     /// </summary>
     void ScanMethodDefFromMetaData()
     {
@@ -123,6 +146,7 @@ public class GenericInstScanner
             /*
              * MemberRef 也有可能带有泛型参数
              * eg. {NS_Test.TestDll_2 NS_Test.TestClsG`1/TestClsGInner`1<NS_Test.TestCls,NS_Test.TestDll_2>::ShowGInner<!!0>(NS_Test.TestCls,NS_Test.TestDll_2,!!0)}
+             * ClassA<T>.Func1() 这种也是MemberRef
              */
             if (mr.MethodSig.ContainsGenericParameter || mr.MethodSig.Generic)
                 continue;

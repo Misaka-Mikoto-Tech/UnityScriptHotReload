@@ -44,63 +44,63 @@ public class Test : MonoBehaviour
 
     void OnBtnTest()
     {
-        Debug.Log($"Test3.s_val={NS_Test.TestCls.s_val}");
+        Debug.Log($"Test3.s_val={NS_Test_Generic.TestCls.s_val}");
 
-        var test = new NS_Test.TestCls(gameObject);
+        var test = new NS_Test_Generic.TestCls();
         test.FuncA(out int val);
         Debug.Log($"OnBtnTest:val={val}");
 
-        Debug.Log($"Test3.s_val={NS_Test.TestCls.s_val}");
+        Debug.Log($"Test3.s_val={NS_Test_Generic.TestCls.s_val}");
 
         // test generic hook
-        {
-            // 默认只 hook 引用类型的类型及其方法，除非手动指定值类型方法实例
-            // 经过测试，泛型类型实例中，无论其自身还是所属类型，只要有一个参数是值类型，那么最终的实例就是独立的，即使是同一值类型的不同引用类型参数的方法
+        //{
+        //    // 默认只 hook 引用类型的类型及其方法，除非手动指定值类型方法实例
+        //    // 经过测试，泛型类型实例中，无论其自身还是所属类型，只要有一个参数是值类型，那么最终的实例就是独立的，即使是同一值类型的不同引用类型参数的方法
 
-            var clsStr = new TestClsG<string>();
-            var clsObj = new TestClsG<object>(); // 这两个应该对应同一个地址和虚表
-            var clsInt = new TestClsG<int>(); // 这个是独立的
+        //    var clsStr = new TestClsG<string>();
+        //    var clsObj = new TestClsG<object>(); // 这两个应该对应同一个地址和虚表
+        //    var clsInt = new TestClsG<int>(); // 这个是独立的
 
-            clsInt.FuncB(2, 3);
+        //    clsInt.FuncB(2, 3);
 
-            var sG = Type.GetType("NS_Test.TestClsG`1, TestDllA");
-            var tStr = typeof(TestClsG<string>);
-            var tObj = typeof(TestClsG<object>);
-            var tInt = typeof(TestClsG<int>);
+        //    var sG = Type.GetType("NS_Test.TestClsG`1, TestDllA");
+        //    var tStr = typeof(TestClsG<string>);
+        //    var tObj = typeof(TestClsG<object>);
+        //    var tInt = typeof(TestClsG<int>);
 
-            var miGG = sG.GetMethod("ShowGA");
-            //var miGG2 = sG.GetMethod("FuncB");
-            var miStrG = tStr.GetMethod("ShowGA");
-            var miObjG = tObj.GetMethod("ShowGA");
-            var miIntG = tInt.GetMethod("ShowGA");
+        //    var miGG = sG.GetMethod("ShowGA");
+        //    //var miGG2 = sG.GetMethod("FuncB");
+        //    var miStrG = tStr.GetMethod("ShowGA");
+        //    var miObjG = tObj.GetMethod("ShowGA");
+        //    var miIntG = tInt.GetMethod("ShowGA");
 
-            var miStrStr = miStrG.MakeGenericMethod(typeof(string));
-            var miStrObj = miStrG.MakeGenericMethod(typeof(object));
-            var miStrBool = miStrG.MakeGenericMethod(typeof(bool));
+        //    var miStrStr = miStrG.MakeGenericMethod(typeof(string));
+        //    var miStrObj = miStrG.MakeGenericMethod(typeof(object));
+        //    var miStrBool = miStrG.MakeGenericMethod(typeof(bool));
 
-            var miObjObj = miObjG.MakeGenericMethod(typeof(object));
+        //    var miObjObj = miObjG.MakeGenericMethod(typeof(object));
 
-            var miIntStr = miIntG.MakeGenericMethod(typeof(string));
-            var miIntObj = miIntG.MakeGenericMethod(typeof(object));
-            var miIntBool = miIntG.MakeGenericMethod(typeof(bool));
+        //    var miIntStr = miIntG.MakeGenericMethod(typeof(string));
+        //    var miIntObj = miIntG.MakeGenericMethod(typeof(object));
+        //    var miIntBool = miIntG.MakeGenericMethod(typeof(bool));
 
-            Debug.Log($"{nameof(miStrStr)}:{miStrStr.MethodHandle.GetFunctionPointer().ToInt64():X}");
-            Debug.Log($"{nameof(miStrObj)}:{miStrObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
-            Debug.Log($"{nameof(miStrBool)}:{miStrBool.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miStrStr)}:{miStrStr.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miStrObj)}:{miStrObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miStrBool)}:{miStrBool.MethodHandle.GetFunctionPointer().ToInt64():X}");
 
-            Debug.Log($"{nameof(miObjObj)}:{miObjObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miObjObj)}:{miObjObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
 
-            Debug.Log($"{nameof(miIntStr)}:{miIntStr.MethodHandle.GetFunctionPointer().ToInt64():X}");
-            Debug.Log($"{nameof(miIntObj)}:{miIntObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
-            Debug.Log($"{nameof(miIntBool)}:{miIntBool.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miIntStr)}:{miIntStr.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miIntObj)}:{miIntObj.MethodHandle.GetFunctionPointer().ToInt64():X}");
+        //    Debug.Log($"{nameof(miIntBool)}:{miIntBool.MethodHandle.GetFunctionPointer().ToInt64():X}");
 
-            //var ret1 = clsStr.ShowGA<string>("abc", "efg");
-            //var ret2 = clsStr.ShowGA<object>("aaa", new object()); // 这两个应该是同一个地址
+        //    //var ret1 = clsStr.ShowGA<string>("abc", "efg");
+        //    //var ret2 = clsStr.ShowGA<object>("aaa", new object()); // 这两个应该是同一个地址
 
-            string typeName = "NS_Test.TestClsG`1, TestDllA";
-            Type type = ParseType(typeName);
+        //    string typeName = "NS_Test.TestClsG`1, TestDllA";
+        //    Type type = ParseType(typeName);
 
-        }
+        //}
         
     }
 

@@ -11,6 +11,8 @@ public class GlobalConfig
 {
     public static GlobalConfig Instance;
 
+    public const string kWrapperClassFullName = "ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__";
+
     public int patchNo;
     public string workDir;
     public string dotnetPath;

@@ -14,21 +14,34 @@ namespace AssemblyPatcher;
 /// </summary>
 public class MethodPatcher
 {
+    /// <summary>
+    /// 遍历IL过程中发现的所有的不包含泛型参数 MethodDef 和 MethodSpec, 以及个别的 MemberRef(TypeSpec内定义的非泛型方法类型为MemberRef)。
+    /// </summary>
+    public HashSet<IMethod> allMethodsWithoutGeneric { get; private set; } = new HashSet<IMethod>();
+
     AssemblyDataForPatch _assemblyDataForPatch;
     Importer            _importer;
+    AssemblyDef         _patchAssDef;
+    TypeDef             _wrapperClass;
+
     public MethodPatcher(AssemblyDataForPatch assemblyData, Importer importer)
     {
         _assemblyDataForPatch = assemblyData;
         _importer = importer;
+        _patchAssDef = _assemblyDataForPatch.patchDllData.moduleDef.Assembly;
+        _wrapperClass = _assemblyDataForPatch.patchDllData.types[GlobalConfig.kWrapperClassFullName].definition;
     }
 
     public void PatchMethod(MethodDef methodDef, Dictionary<MethodDef, MethodFixStatus> processed, int depth)
     {
-        var fixStatus = new MethodFixStatus();
         if (processed.ContainsKey(methodDef))
             return;
-        else
-            processed.Add(methodDef, fixStatus);
+
+        var fixStatus = new MethodFixStatus();
+        processed.Add(methodDef, fixStatus);
+
+        // 即使patch method无body也记录下来，也许原始dll内的定义是有body的，只有两边都无body最终才会跳过
+        AddToAllMethodsWithoutGeneric(methodDef);
 
         if (!methodDef.HasBody)
             return;
@@ -56,7 +69,6 @@ public class MethodPatcher
 
         // 重映射函数Body内的指令
         var arrIns = methodDef.Body.Instructions.ToArray();
-        var patchAssembly = _assemblyDataForPatch.patchDllData.moduleDef.Assembly;
 
         for (int i = 0, imax = arrIns.Length; i < imax; i++)
         {
@@ -79,7 +91,7 @@ public class MethodPatcher
                      * 请注意！，泛型在其它dll定义但泛型参数在当前dll内时 DefinitionAssembly 也是其它dll, 例如 Action<MyClass> 的定义就在 mscorlib 内
                      * 另外，泛型参数(T,V,U) 等的类型为 TypeSpecMD
                      */
-                    if ((typeDefOrRef is not TypeSpec) && typeDefOrRef.DefinitionAssembly != patchAssembly)
+                    if ((typeDefOrRef is not TypeSpec) && typeDefOrRef.DefinitionAssembly != _patchAssDef)
                         break;
 
                     ins.Operand = GetBaseTypeOrRef(typeDefOrRef);
@@ -98,10 +110,14 @@ public class MethodPatcher
                     {
                         ins.Operand = GetBaseMethodRef(methodDefOrRef);
                     }
+
+                    AddToAllMethodsWithoutGeneric(methodDefOrRef);
                     break;
                 case MethodSpec methodSpec: // 泛型实例，（为什么 TypeSpec 继承自 ITypeDefOrRef， 但 MethodSpec 就不继承自 IMethodDefOrRef 呢？）
                     var sig1 = (methodSpec as IMethod).MethodSig;
                     ins.Operand = GetBaseMethodSpec(methodSpec);
+
+                    AddToAllMethodsWithoutGeneric(methodSpec);
                     break;
                 /*
                  * 此类型判断必须放在最后。对于引用，无法从类型区分字段还是方法, 因此只能使用if判断
@@ -124,6 +140,47 @@ public class MethodPatcher
                     break;
             } // switch
         } // for
+    }
+
+    /// <summary>
+    /// 将不含泛型参数的方法添加到函数列表中
+    /// </summary>
+    /// <param name="method"></param>
+    void AddToAllMethodsWithoutGeneric(IMethod method)
+    {
+        if (method.Name == ".cctor")
+            return;
+
+        var declType = method.DeclaringType;
+        if (declType == _wrapperClass)
+            return;
+
+        // 此处 dnlib 疑似有bug，TypeDef.ContainsGenericParameter 总会返回false，即使是泛型类型,
+        // 因此下面需要对 TypeDef 单独再判断一下 HasGenericParameters
+        if (declType.DefinitionAssembly != _patchAssDef
+            || declType.ContainsGenericParameter)
+            return;
+
+        if (declType is TypeDef td)
+            if (td.HasGenericParameters)
+                return;
+
+        if(method is MethodDef methodDef)
+        {
+            if (!methodDef.HasGenericParameters)
+                allMethodsWithoutGeneric.Add(methodDef);
+        }
+        else if(method is MemberRef memberRef)
+        {
+            var resolved = memberRef.Resolve();
+            // 此种情况是 TypeSpec 内定义的非泛型方法
+            if(declType is TypeSpec)
+                allMethodsWithoutGeneric.Add(memberRef);
+        }
+        else if(method is MethodSpec methodSpec)
+        {
+            allMethodsWithoutGeneric.Add(methodSpec);
+        }
     }
 
 

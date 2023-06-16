@@ -149,7 +149,7 @@ namespace NS_Test
 
         public TestCls(GameObject go)
         {
-            EditorUtility.DisplayDialog("title0", "text0", "OK");
+            EditorUtility.DisplayDialog("title0", "TestCls.ctor()", "OK");
             int val = 0x3456;
             Action<int> act = x =>
             {
@@ -180,7 +180,6 @@ namespace NS_Test
             Debug.Log("static constructor");
         }
 
-        [NS_Test(index = 2, types = new Type[] {typeof(int), typeof(string), typeof(TestCls)})]
         public void FuncA(out int val)
         {
             val = 2;
@@ -216,33 +215,41 @@ namespace NS_Test
             Debug.Log("static constructor patched");
         }
 
-        [NS_Test(index = 5, types = new Type[] {typeof(int), typeof(string), typeof(TestCls)})]
         public void FuncA(out int val)
         {
-            val = 2000;
-            Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
-            Debug.Log($"x is OK:{f(val + 2)}");
-            TestGeneric();
-            TestC();
-            Debug.Log($"Test4.val={Test4.val} from Test()");
-            str = "be happy";
-            Debug.Log(str2);
-            FuncNew();
+            val = 200;
+            EditorUtility.DisplayDialog("title", "test_ShowGInner_0", "OK");
+            _genericFiledTest = new TestClsG<TestCls>.TestClsGInner<TestDll_2>();
+            var val0 = _genericFiledTest.ShowInner_Test(0x2345); // 泛型类型的非泛型方法内调用泛型方法
+            EditorUtility.DisplayDialog("title", "test_ShowGInner_1", "OK");
+            var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
+            EditorUtility.DisplayDialog("title", "test_ShowGInner_2", "OK");
+            return;
 
-            _innerTest.FuncInnerA(5);
+            //val = 2000;
+            //Func<int, bool> f = (int x) => { Debug.Log($"{x + 1}-{str}..."); return x > 101; };
+            //Debug.Log($"x is OK:{f(val + 2)}");
+            //TestGeneric();
+            //TestC();
+            //Debug.Log($"Test4.val={Test4.val} from Test()");
+            //str = "be happy";
+            //Debug.Log(str2);
+            //FuncNew();
 
-            int valB = TestDllB_Main.Calc(1, 6);
-            Debug.Log($"valB from Ref dll = {valB}");
+            //_innerTest.FuncInnerA(5);
 
-            var newCls = new NewTestClass();
-            newCls.x = 1;
-            Debug.Log($"NewTestClass.Add:{newCls.Add(3, 5)}");
+            //int valB = TestDllB_Main.Calc(1, 6);
+            //Debug.Log($"valB from Ref dll = {valB}");
 
-            var test2 = new TestDll_2();
-            int z = test2.Mul_2(5, 6);
-            Debug.Log($"test2={z}");
+            //var newCls = new NewTestClass();
+            //newCls.x = 1;
+            //Debug.Log($"NewTestClass.Add:{newCls.Add(3, 5)}");
 
-            PrintMethodLocation(MethodBase.GetCurrentMethod());
+            //var test2 = new TestDll_2();
+            //int z = test2.Mul_2(5, 6);
+            //Debug.Log($"test2={z}");
+
+            //PrintMethodLocation(MethodBase.GetCurrentMethod());
         }
         public void FuncNew()
         {
@@ -341,7 +348,7 @@ namespace NS_Test
             _genericFiledTest.innerField_V = new TestDll_2();
             EditorUtility.DisplayDialog("title4", "text4", "OK");
 
-            var val0 = _genericFiledTest.ShowInner(0x2345);
+            var val0 = _genericFiledTest.ShowInner_Test(0x2345);
             EditorUtility.DisplayDialog("title5", "text5", "OK");
             var val1 = _genericFiledTest.ShowGInner<double>(this, null, 321.0);
             var val2 = _genericFiledTest.FuncG(this, "test words", null);
@@ -424,18 +431,38 @@ namespace NS_Test
 #endif
             }
 
+            public int ShowInner_Test(int x)
+            {
+                EditorUtility.DisplayDialog("title4.1", "text4.1", "OK");
+                x += 0x5678;
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                EditorUtility.DisplayDialog("title4.2", "text4.2", "OK");
+                go.AddComponent<MonoTestA>();
+                EditorUtility.DisplayDialog("title4.3", "text4.3", "OK");
+                var val1 = ShowGInner<long>(default(T), default(V), x);
+                EditorUtility.DisplayDialog("title4.4", "text4.4", "OK");
+                var val2 = FuncG(default(T), "abc", default(V));
+                EditorUtility.DisplayDialog("title4.5", "text4.5", "OK");
+#if !APPLY_PATCH
+                return x + 1;
+#else
+                return x + 2;
+#endif
+            }
+
             public V ShowGInner<UK>(T arg0, V arg1, UK arg2)
             {
-                EditorUtility.DisplayDialog("title4.3.1", "text4.3.1", "OK");
-                Debug.Log(typeof(Func<int, bool>));
-                EditorUtility.DisplayDialog("title4.3.2", "text4.3.2", "OK");
-                Debug.Log(typeof(Func<int, V>));
-                EditorUtility.DisplayDialog("title4.3.3", "text4.3.3", "OK");
-                Debug.Log(typeof(Func<UK, V>));
-                EditorUtility.DisplayDialog("title4.3.4", "text4.3.4", "OK");
-                Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(UK).GetType()}");
-                EditorUtility.DisplayDialog("title4.3.5", "text4.3.5", "OK");
                 return arg1;
+                //EditorUtility.DisplayDialog("title4.3.1", "text4.3.1", "OK");
+                //Debug.Log(typeof(Func<int, bool>));
+                //EditorUtility.DisplayDialog("title4.3.2", "text4.3.2", "OK");
+                //Debug.Log(typeof(Func<int, V>));
+                //EditorUtility.DisplayDialog("title4.3.3", "text4.3.3", "OK");
+                //Debug.Log(typeof(Func<UK, V>));
+                //EditorUtility.DisplayDialog("title4.3.4", "text4.3.4", "OK");
+                //Debug.Log($"ShowInner, T is:{typeof(T).GetType()}, U is:{typeof(UK).GetType()}");
+                //EditorUtility.DisplayDialog("title4.3.5", "text4.3.5", "OK");
+                //return arg1;
             }
 
             public V FuncG(T arg0, string arg1, V arg2)

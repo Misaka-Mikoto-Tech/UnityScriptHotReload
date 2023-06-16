@@ -149,9 +149,7 @@ namespace ScriptHotReload
                     {
                         try
                         {
-                            if (_methodsToHook.Count > 0)
-                                patchNo++;
-
+                            patchNo++;
                             UnityEngine.Debug.Log("<color=yellow>热重载完成</color>");
                         }
                         catch(Exception ex)
