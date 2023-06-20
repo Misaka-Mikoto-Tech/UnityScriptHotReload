@@ -32,8 +32,8 @@ public class ScannedMethodInfo
     /// </summary>
     public MethodDef genericMethodInBase;
     public MethodDef genericMethodInPatch;
-    public List<TypeSig> typeGenArgs = new List<TypeSig>();
-    public List<TypeSig> methodGenArgs = new List<TypeSig>();
+    public List<TypeSig> typeGenArgs;
+    public List<TypeSig> methodGenArgs;
 
     public override string ToString() => method.ToString();
 }
@@ -52,8 +52,8 @@ public class ScannedTypeSpecs
 /// </summary>
 public class GenericInstArgs
 {
-    public List<TypeSig> typeGenArgs = new List<TypeSig>();
-    public List<TypeSig> methodGenArgs = new List<TypeSig>();
+    public List<TypeSig> typeGenArgs;
+    public List<TypeSig> methodGenArgs;
     public IMethod instMethodInBase;
 
     public MethodDef wrapperMethodDef; // wrapper 函数生成后填充
@@ -237,7 +237,8 @@ public class GenericInstScanner
                 instData.method = mr;
                 instData.genericMethodInBase = resoledMethod;
                 instData.genericMethodInPatch = patchMethodDef;
-                instData.typeGenArgs.AddRange(sig.GenericArguments);
+                instData.typeGenArgs =new List<TypeSig>(sig.GenericArguments);
+                instData.methodGenArgs = new List<TypeSig>();
                 _scannedMethodInfos.Add(instData);
             }
         }
@@ -278,9 +279,11 @@ public class GenericInstScanner
                 instData.genericMethodInPatch = patchMethodDef;
 
                 if (finalType.ToTypeSig() is GenericInstSig genericSig)
-                    instData.typeGenArgs.AddRange(genericSig.GenericArguments);
+                    instData.typeGenArgs = new List<TypeSig>(genericSig.GenericArguments);
+                else
+                    instData.typeGenArgs = new List<TypeSig>();
 
-                instData.methodGenArgs.AddRange(methodSig.GenericArguments); // 只需要获取 Mvar, Var不关注，因此可以重用这个变量
+                instData.methodGenArgs = new List<TypeSig>(methodSig.GenericArguments); // 只需要获取 Mvar, Var不关注，因此可以重用这个变量
 
                 _scannedMethodInfos.Add(instData);
             };
@@ -377,8 +380,8 @@ public class GenericInstScanner
                 {
                     uniqueArgsHash.Add(sb.ToString());
                     var genInstArgs = new GenericInstArgs();
-                    genInstArgs.typeGenArgs = typeSigs;
-                    genInstArgs.methodGenArgs = methodSigs;
+                    genInstArgs.typeGenArgs = new List<TypeSig>(typeSigs);
+                    genInstArgs.methodGenArgs = new List<TypeSig>(methodSigs);
                     genInstArgs.instMethodInBase = instScanned.method;
                     genMethodData.genericInsts.Add(genInstArgs);
                 }

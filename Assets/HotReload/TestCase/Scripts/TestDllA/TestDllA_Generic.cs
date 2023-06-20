@@ -15,7 +15,8 @@ namespace NS_Test_Generic
             val = 22;
             {
                 var _genericFiledTest = new TestClsG<object>();
-                var val0 = _genericFiledTest.Show_Test(0x2345); // 通过泛型类型的非泛型函数间接调用泛型方法，最终的MethodSpec不会被记录，不加wrapper会crash
+                // 通过泛型类型的非泛型函数间接调用泛型方法 `ShowG`，最终的MethodSpec不会被记录，不加wrapper会crash
+                var val0 = _genericFiledTest.Show_Test(0x2345);
             }
             {// 两种不同类型实例间接调用ShowG
                 var _genericFiledTest = new TestClsG<int>();
