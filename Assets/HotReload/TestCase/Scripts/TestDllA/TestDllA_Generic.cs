@@ -1,7 +1,4 @@
 ﻿//#define APPLY_PATCH
-#if APPLY_PATCH
-//#   define APPLY_PATCH2
-#endif
 
 using System.Runtime.CompilerServices;
 using UnityEditor;
@@ -18,17 +15,17 @@ namespace NS_Test_Generic
             val = 22;
             {
                 var _genericFiledTest = new TestClsG<object>();
-#if APPLY_PATCH2
-                // 这里有问题，如果原始dll内不存在或者不主动调用，就不会被hook，之后可以尝试指令流分析或者允许手动添加
+#if APPLY_PATCH
+                // 测试泛型类的泛型方法实例在原始dll内不存在，而只在patch dll存在的情况下是否能够被patch
                 var ojb2 = _genericFiledTest.ShowG<object>(); // 直接调用泛型类的泛型方法（这样会把此MethodSpec记录到MetaData里)
 #endif
                 var val0 = _genericFiledTest.Show_Test(0x2345); // 通过泛型类型的非泛型函数间接调用泛型方法，最终的MethodSpec不会被记录，不加wrapper会crash
             }
-            //{// 两种不同类型实例间接调用ShowG
-            //    var _genericFiledTest = new TestClsG<int>();
-            //    //var ojb2 = _genericFiledTest.ShowG<object>();
-            //    var val0 = _genericFiledTest.Show_Test(0x3456);
-            //}
+            {// 两种不同类型实例间接调用ShowG
+                var _genericFiledTest = new TestClsG<int>();
+                //var ojb2 = _genericFiledTest.ShowG<object>();
+                //var val0 = _genericFiledTest.Show_Test(0x3456);
+            }
 
             EditorUtility.DisplayDialog("title5", "text5", "OK");
         }   

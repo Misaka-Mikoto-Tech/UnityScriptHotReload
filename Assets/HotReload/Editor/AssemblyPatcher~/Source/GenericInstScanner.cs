@@ -1,4 +1,5 @@
 ﻿using dnlib.DotNet;
+using System.Collections.Generic;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 
@@ -38,6 +39,15 @@ public class ScannedMethodInfo
 }
 
 /// <summary>
+/// 扫描出来的类型实例数据，用来对同时具有类型泛型参数和方法类型参数的方法实例进行 CrossGen
+/// </summary>
+public class ScannedTypeSpecs
+{
+    public TypeDef genericDef;
+    public Dictionary<string, TypeSpec> typeSpecs = new Dictionary<string, TypeSpec>();
+}
+
+/// <summary>
 /// 泛型实例参数
 /// </summary>
 public class GenericInstArgs
@@ -48,6 +58,8 @@ public class GenericInstArgs
 
     public MethodDef wrapperMethodDef; // wrapper 函数生成后填充
     public IMethod instMethodInPatch;  // wrapper 函数生成后填充
+
+    public override string ToString() => instMethodInBase.ToString();
 }
 
 /// <summary>
@@ -77,6 +89,7 @@ public class GenericInstScanner
 {
     public List<GenericMethodData> genericMethodDatas { get; private set; } = new List<GenericMethodData>();
 
+    private Dictionary<string, ScannedTypeSpecs> _typeSpecDic = new Dictionary<string, ScannedTypeSpecs>();
     private AssemblyDataForPatch    _assemblyDataForPatch;
     private ModuleDefMD             _baseModuleDef;
     private Dictionary<string, MethodDef> _gernericMethodFilter; // 需要过滤的方法，value: Patch dll内的包含泛型的方法定义
@@ -125,8 +138,58 @@ public class GenericInstScanner
     /// </summary>
     void ScanTypeSpecFromMetaData()
     {
-        // TODO 是否有跟踪数据流的方式确定所属真实类型(但这样需要遍历原始dll内所有的il，所以还是暴力Cross 原始dll内的实例meta更简单？)
+        var assembly = _baseModuleDef.Assembly;
+        CorLibTypeSig objSig = assembly.ManifestModule.CorLibTypes.Object;
+        List<TypeSig> argList = new List<TypeSig>();
 
+        uint count = _baseModuleDef.Metadata.TablesStream.TypeSpecTable.Rows;
+        for (uint i = 1; i <= count; i++) // rowID 从1开始计数
+        {
+            TypeSpec ts = _baseModuleDef.ResolveTypeSpec(i);
+            if (ts.ContainsGenericParameter)
+                continue;
+
+            TypeDef genericTypeDef = ts.ResolveTypeDef();
+            if (genericTypeDef == null || genericTypeDef.DefinitionAssembly != assembly)
+                continue;
+
+            string genericName = genericTypeDef.ToString();
+            if(!_typeSpecDic.TryGetValue(genericName, out var typeSpecsInfo))
+            {
+                typeSpecsInfo = new ScannedTypeSpecs();
+                typeSpecsInfo.genericDef = genericTypeDef;
+                _typeSpecDic.Add(genericName, typeSpecsInfo);
+            }
+
+            // 前天合并泛型参数类型，减少CrossGen的数量（此处不合并最后合并阶段也会被合并，但是中间运算量会变大）
+            var sig = ts.TypeSig.RemovePinnedAndModifiers();
+            if (sig is SZArraySig) // 数组类型的不记录，因为不会存在数组类型的 MethodSpec 这种情况
+                continue;
+            var instSig = sig as GenericInstSig;
+
+            argList.Clear();
+            argList.AddRange(instSig.GenericArguments);
+            bool needRecreateTs = false;
+            for(int j = 0, jmax = argList.Count; j < jmax; j++)
+            {
+                if (argList[j].IsByRef)
+                {
+                    argList[j] = objSig;
+                    needRecreateTs = true;
+                }
+            }
+
+            if (needRecreateTs)
+            {
+                var genericSig = genericTypeDef.ToTypeSig() as ClassOrValueTypeSig;
+                var newSig = new GenericInstSig(genericSig, argList);
+                TypeSpec newTs = new TypeSpecUser(newSig);
+
+                typeSpecsInfo.typeSpecs.TryAdd(newTs.ToString(), newTs);
+            }
+            else
+                typeSpecsInfo.typeSpecs.TryAdd(ts.ToString(), ts);
+        }
     }
 
     /// <summary>
@@ -191,13 +254,11 @@ public class GenericInstScanner
         {
             MethodSpecMD ms = _baseModuleDef.ResolveMethodSpec(i) as MethodSpecMD;
 
-            var declType = ms.DeclaringType;
             /*
-             * V NS_Test.TestClsG`1/TestClsGInner`1<T,V>::ShowGInner<System.Int64>(T,V,System.Int64)
-             * 这种带泛型参数的类型是不允许的（但 dotnet 只记录了一级，此处没有记录调用者的泛型类型, 考虑将此类型合并进所有的其所属泛型类型内）
+             * 有可能是 TypeDef 或者 TypeSpec
+             * NS_Test_Generic.TestClsG`1<T> 这种也是 TypeSpec
              */
-            if (declType.ContainsGenericParameter || declType.DefinitionAssembly != assembly)
-                continue;
+            var declType = ms.DeclaringType;
 
             var methodSig = ms.GenericInstMethodSig;
             if (methodSig.ContainsGenericParameter)
@@ -206,19 +267,50 @@ public class GenericInstScanner
             // 获取实例类型的泛型原始类型
             var resolvedMethod = ms.Method.ResolveMethodDef();
             var fullName = resolvedMethod.FullName;
-            if (_gernericMethodFilter.TryGetValue(fullName, out var patchMethodDef))
+            if (!_gernericMethodFilter.TryGetValue(fullName, out var patchMethodDef))
+                continue;
+
+            Action<MethodSpec, ITypeDefOrRef> addMethodSpec = (MethodSpec ms_, ITypeDefOrRef finalType) =>
             {
                 var instData = new ScannedMethodInfo();
-                instData.method = ms;
+                instData.method = ms_;
                 instData.genericMethodInBase = resolvedMethod;
                 instData.genericMethodInPatch = patchMethodDef;
 
-                if(declType.ToTypeSig() is GenericInstSig genericSig)
+                if (finalType.ToTypeSig() is GenericInstSig genericSig)
                     instData.typeGenArgs.AddRange(genericSig.GenericArguments);
 
-                instData.methodGenArgs.AddRange(methodSig.GenericArguments);
+                instData.methodGenArgs.AddRange(methodSig.GenericArguments); // 只需要获取 Mvar, Var不关注，因此可以重用这个变量
 
                 _scannedMethodInfos.Add(instData);
+            };
+
+            /*
+             * 如果 MethodSpec 属于一个 TypeSpc，dll 的 MetaData 内是没有存储其所属泛型类型实例的，
+             * 因此只能暴力CrossGen, 代价是生成的MethodSpec数量比较多
+             */
+            if (declType.ContainsGenericParameter)
+            {
+                var genericType = declType.ResolveTypeDef();
+                if (!_typeSpecDic.TryGetValue(genericType.ToString(), out var instData))
+                    return;
+
+                // 获取泛型方法签名
+                var genericMethodSig = ms.Method.MethodSig; // T <!!0>(T,U)
+                foreach (var (_, typeSpec) in instData.typeSpecs)
+                {
+                    /*
+                     * 创建填充类型泛型参数的泛型方法引用
+                     * System.Single NS_Test.TestClsG`1<System.Single>::ShowGA<!!0>(System.Single,U)
+                     */
+                    var baseGenericMethodRef = new MemberRefUser(_assemblyDataForPatch.baseDllData.moduleDef, ms.Name, genericMethodSig, typeSpec);
+                    var newMethodSpec = new MethodSpecUser(baseGenericMethodRef, ms.GenericInstMethodSig);
+                    addMethodSpec(newMethodSpec, typeSpec);
+                }
+            }
+            else
+            {
+                addMethodSpec(ms, declType);
             }
         }
     }
