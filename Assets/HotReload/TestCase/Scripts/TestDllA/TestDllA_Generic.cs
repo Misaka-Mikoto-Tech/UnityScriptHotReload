@@ -15,10 +15,6 @@ namespace NS_Test_Generic
             val = 22;
             {
                 var _genericFiledTest = new TestClsG<object>();
-#if APPLY_PATCH
-                // 测试泛型类的泛型方法实例在原始dll内不存在，而只在patch dll存在的情况下是否能够被patch
-                var ojb2 = _genericFiledTest.ShowG<object>(); // 直接调用泛型类的泛型方法（这样会把此MethodSpec记录到MetaData里)
-#endif
                 var val0 = _genericFiledTest.Show_Test(0x2345); // 通过泛型类型的非泛型函数间接调用泛型方法，最终的MethodSpec不会被记录，不加wrapper会crash
             }
             {// 两种不同类型实例间接调用ShowG
@@ -44,6 +40,7 @@ namespace NS_Test_Generic
         public int ShowG<K>()
         {
 #if APPLY_PATCH
+            // 测试泛型类的泛型方法实例在原始dll内只被间接调用而没有被直接调用的情况下是否能够被patch
             EditorUtility.DisplayDialog("title4.3.5", "ShowG in Patch", "OK");
 #endif
             return default;
