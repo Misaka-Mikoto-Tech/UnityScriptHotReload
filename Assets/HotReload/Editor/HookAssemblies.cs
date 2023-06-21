@@ -29,10 +29,12 @@ namespace ScriptHotReload
             Dictionary<string, Type> dicTypesPatch = new Dictionary<string, Type>();
 
             foreach (var t in original.GetTypes()) // 包含 NestedClass
-                dicTypesOri.Add(t.FullName, t);
+                if(!t.IsAbstract && (t.IsClass || t.IsValueType || t.IsInterface)) // interface 允许包含默认方法
+                    dicTypesOri.Add(t.FullName, t);
 
             foreach (var t in patch.GetTypes())
-                dicTypesPatch.Add(t.FullName, t);
+                if (!t.IsAbstract && (t.IsClass || t.IsValueType || t.IsInterface)) // interface 允许包含默认方法
+                    dicTypesPatch.Add(t.FullName, t);
 
             Dictionary<MethodBase, MethodBase> methodsToHook = new Dictionary<MethodBase, MethodBase>(); // original, patch
 
@@ -77,10 +79,17 @@ namespace ScriptHotReload
                     if(miPatch.ContainsGenericParameters) // 所属类型无泛型，但函数包含泛型的也算泛型类型
                         continue;
 
+                    if(miPatch.IsAbstract || miPatch.GetMethodBody().GetILAsByteArray().Length == 0)
+                        continue;
+
                     string sig = miPatch.ToString();
                     var miOri = methodsOfTypeOri.Find(m => m.ToString() == sig);
                     if (miOri != null)
                     {
+                        // 将纯虚方法修改为非纯虚方法不进行Hook（因为原始方法根本不会被jit，没有函数体可以用来填充jmp代码）
+                        if (miOri.IsAbstract || miOri.GetMethodBody().GetILAsByteArray().Length == 0)
+                            continue;
+
                         methodsToHook.Add(miOri, miPatch);
                     }
                     else
