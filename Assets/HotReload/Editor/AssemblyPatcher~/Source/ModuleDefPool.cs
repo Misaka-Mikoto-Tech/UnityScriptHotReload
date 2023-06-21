@@ -206,6 +206,9 @@ public class TypeData
 
     public Dictionary<string, MethodData> methods = new Dictionary<string, MethodData>();
     public Dictionary<string, IMemberRef> members = new Dictionary<string, IMemberRef>(); // 方法，字段，事件，属性
+    public HashSet<PdbDocument> pdbDocuments = new HashSet<PdbDocument>();
+
+    public override string ToString() => definition.ToString();
 }
 
 public class MethodData
@@ -220,6 +223,8 @@ public class MethodData
     {
         this.typeData = typeData; this.definition = definition; this.isLambda = isLambda;
         this.document = Utils.GetDocOfMethod(definition);
+        if(document != null)
+            typeData.pdbDocuments.Add(document);
     }
 
     public JSONNode ToJsonNode()

@@ -22,6 +22,8 @@ public class SourceCompiler
     private static string s_CS_File_Path__Patch_Assembly_Attr__;            // __Patch_Assembly_Attr__.cs
     private static string s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__; // __Patch_GenericInst_Wrapper__Gen__.cs
 
+    private HashSet<string> _filesToCompile = new HashSet<string>();
+
     static SourceCompiler()
     {
         s_CS_File_Path__Patch_Assembly_Attr__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_Assembly_Attr__.cs";
@@ -51,7 +53,8 @@ public class SourceCompiler
         }
 
         _rspPath = GlobalConfig.Instance.tempScriptDir + $"/__{moduleName}_Patch.rsp";
-        
+
+        GetAllFilesToCompile();
         GenRspFile();
         int retCode = RunDotnetCompileProcess();
         return retCode;
@@ -149,10 +152,45 @@ namespace ScriptHotReload
 
         sb.AppendLine($"\"{s_CS_File_Path__Patch_Assembly_Attr__}\"");
         sb.AppendLine($"\"{s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__}\"");
-        foreach (var src in GlobalConfig.Instance.filesToCompile[moduleName])
+        foreach (var src in _filesToCompile)
             sb.AppendLine($"\"{src}\"");
 
         File.WriteAllText(_rspPath, sb.ToString(), Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 获取所有需要编译的文件，包括已改变的文件和可能的partial class所在的其它文件（只参与编译不会被hook）
+    /// </summary>
+    /// <remarks>需要像生成泛型pair一样生成返回所有hook pair的方法，而不是让主程序自己反射去读取，因为反射无法获取方法所在文件</remarks>
+    void GetAllFilesToCompile()
+    {
+        var fileChanged = GlobalConfig.Instance.filesToCompile[moduleName];
+        foreach (var f in  fileChanged)
+            _filesToCompile.Add(f);
+
+        ModuleDefData moduleData = ModuleDefPool.GetModuleData(moduleName);
+        foreach(var (_, data) in moduleData.types)
+        {
+            // 只存在于一个文件内的类型一定不是位于多个文件内的 Partial Class（同一个文件内多次定义的Partial Class不用管）
+            if (data.pdbDocuments.Count <= 1)
+                continue;
+
+            bool isTargetType = false;
+            foreach(var pdb in data.pdbDocuments)
+            {
+                if(fileChanged.Contains(pdb.Url))
+                {
+                    isTargetType = true;
+                    break;
+                }
+            }
+            // 只要类型分布的源码文件有一个位于已更改源码文件列表内，就把其它的源码文件都添加进来
+            if (isTargetType)
+            {
+                foreach (var pdb in data.pdbDocuments)
+                    _filesToCompile.Add(pdb.Url);
+            }
+        }
     }
 
     int RunDotnetCompileProcess()
@@ -176,9 +214,9 @@ namespace ScriptHotReload
         {
             if (args.Data != null)
             {
-                if (args.Data.StartsWith("error"))
+                if (args.Data.Contains("error "))
                     Debug.LogError(args.Data);
-                else if(args.Data.StartsWith("warning"))
+                else if(args.Data.Contains("warning "))
                     Debug.LogWarning(args.Data);
                 else
                     Debug.Log(args.Data);
