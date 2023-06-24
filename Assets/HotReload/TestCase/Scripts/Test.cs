@@ -114,7 +114,7 @@ public class Test : MonoBehaviour
 
     void OnBtnPartialClass()
     {
-        var partialClass = new NS_Test.TestPartialClass();
+        var partialClass = new NS_Test.NS_Test_Inner2.TestPartialClass();
         partialClass.x = 3;
         partialClass.y_partial = "partial test str";
         partialClass.DoTest();

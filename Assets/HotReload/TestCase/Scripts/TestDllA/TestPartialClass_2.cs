@@ -4,9 +4,17 @@ using UnityEngine;
 
 namespace NS_Test
 {
-    public partial class TestPartialClass
+    namespace NS_Test_Inner2
     {
-        public string y_partial;
+        public partial class TestPartialClass
+        {
+            public string y_partial;
+        }
+    }
+    
+    public partial class TestPartialClass2
+    {
+        public int x;
     }
 
 }

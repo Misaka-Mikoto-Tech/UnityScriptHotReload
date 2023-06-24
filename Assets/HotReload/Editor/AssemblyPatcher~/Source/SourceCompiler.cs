@@ -165,6 +165,10 @@ namespace ScriptHotReload
     void GetAllFilesToCompile()
     {
         var fileChanged = GlobalConfig.Instance.filesToCompile[moduleName];
+        var defines = GlobalConfig.Instance.defines;
+        var partialClassScanner = new PartialClassScanner(moduleName, fileChanged, defines);
+        partialClassScanner.Scan();
+
         foreach (var f in  fileChanged)
             _filesToCompile.Add(f);
 

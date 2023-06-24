@@ -47,6 +47,12 @@ namespace ScriptHotReload
         }
 
         #region 菜单功能
+        [MenuItem("Tools/HotReload/测试")]
+        static void TestFunc()
+        {
+            var script = AssetDatabase.LoadAssetAtPath<MonoScript>("Assets/HotReload/TestCase/Scripts/TestDllA/TestDllA_2.cs");
+        }
+
         /// <summary>
         /// 重载事件是否已触发（auto模式下将始终触发）
         /// </summary>
