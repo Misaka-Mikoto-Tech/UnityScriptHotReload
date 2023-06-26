@@ -115,9 +115,16 @@ public class GenericInstScanner
     /// <returns></returns>
     public void Scan()
     {
+        var fileChanged = GlobalConfig.Instance.filesToCompile[_assemblyDataForPatch.name];
+
         _gernericMethodFilter = new Dictionary<string, MethodDef>();
         foreach (var (_, methodData) in _assemblyDataForPatch.patchDllData.allMethods)
         {
+            // 只对发生改变的源码文件内定义的方法生成wrapper
+            // 没有 document 的也不处理（编译器自动生成的默认方法）
+            if (methodData.document == null || !fileChanged.Contains(methodData.document.Url))
+                continue;
+
             var method = methodData.definition;
             if (method.HasGenericParameters || method.DeclaringType.HasGenericParameters) // TODO Nested Type?
                 _gernericMethodFilter.Add(method.FullName, method.ResolveMethodDef());

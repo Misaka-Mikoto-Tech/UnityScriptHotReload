@@ -22,7 +22,7 @@ public class SourceCompiler
     private static string s_CS_File_Path__Patch_Assembly_Attr__;            // __Patch_Assembly_Attr__.cs
     private static string s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__; // __Patch_GenericInst_Wrapper__Gen__.cs
 
-    private HashSet<string> _filesToCompile = new HashSet<string>();
+    private List<string> _filesToCompile = new List<string>();
 
     static SourceCompiler()
     {
@@ -169,32 +169,8 @@ namespace ScriptHotReload
         var partialClassScanner = new PartialClassScanner(moduleName, fileChanged, defines);
         partialClassScanner.Scan();
 
-        foreach (var f in  fileChanged)
-            _filesToCompile.Add(f);
-
-        ModuleDefData moduleData = ModuleDefPool.GetModuleData(moduleName);
-        foreach(var (_, data) in moduleData.types)
-        {
-            // 只存在于一个文件内的类型一定不是位于多个文件内的 Partial Class（同一个文件内多次定义的Partial Class不用管）
-            if (data.pdbDocuments.Count <= 1)
-                continue;
-
-            bool isTargetType = false;
-            foreach(var pdb in data.pdbDocuments)
-            {
-                if(fileChanged.Contains(pdb.Url))
-                {
-                    isTargetType = true;
-                    break;
-                }
-            }
-            // 只要类型分布的源码文件有一个位于已更改源码文件列表内，就把其它的源码文件都添加进来
-            if (isTargetType)
-            {
-                foreach (var pdb in data.pdbDocuments)
-                    _filesToCompile.Add(pdb.Url);
-            }
-        }
+        _filesToCompile.Clear();
+        _filesToCompile.AddRange(partialClassScanner.allFilesNeeded);
     }
 
     int RunDotnetCompileProcess()

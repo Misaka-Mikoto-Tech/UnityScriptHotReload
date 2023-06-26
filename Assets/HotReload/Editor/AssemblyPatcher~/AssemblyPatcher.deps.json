@@ -9,7 +9,7 @@
       "AssemblyPatcher/1.0.0": {
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "4.6.0",
-          "NHibernate": "5.4.0",
+          "NHibernate": "5.4.2",
           "dnlib": "3.6.0"
         },
         "runtime": {
@@ -221,7 +221,7 @@
           "System.Xml.XDocument": "4.3.0"
         }
       },
-      "NHibernate/5.4.0": {
+      "NHibernate/5.4.2": {
         "dependencies": {
           "Antlr3.Runtime": "3.5.1",
           "Iesi.Collections": "4.0.4",
@@ -232,7 +232,7 @@
         "runtime": {
           "lib/net6.0/NHibernate.dll": {
             "assemblyVersion": "5.4.0.0",
-            "fileVersion": "5.4.0.0"
+            "fileVersion": "5.4.2.0"
           }
         }
       },
@@ -1120,12 +1120,12 @@
       "path": "netstandard.library/1.6.1",
       "hashPath": "netstandard.library.1.6.1.nupkg.sha512"
     },
-    "NHibernate/5.4.0": {
+    "NHibernate/5.4.2": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-PtkfoxAxrjLhsY78aYZYzGWnWi1AKC7iJZF+4g6Y9fnmbIX0lL+jxlasaFgm1A68envFKQHK5Kc5V+LnD5La9w==",
-      "path": "nhibernate/5.4.0",
-      "hashPath": "nhibernate.5.4.0.nupkg.sha512"
+      "sha512": "sha512-pikbNZG4UV8lRBMpvxdgEEuzpWHQFJ8M4HUhmyHdHQzsiz+B/w2kJemVXWycx0NfrD/2yV54Tu15ZCD51z44Bg==",
+      "path": "nhibernate/5.4.2",
+      "hashPath": "nhibernate.5.4.2.nupkg.sha512"
     },
     "Remotion.Linq/2.2.0": {
       "type": "package",

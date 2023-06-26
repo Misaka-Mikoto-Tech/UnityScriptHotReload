@@ -358,6 +358,8 @@ public class AssemblyPatcher
 
         instructions.Add(Instruction.Create(OpCodes.Newobj, dicDefInfos.dicCtor));    // newobj Dictionary<MethodInfo, MethodInfo>.ctor()
         
+        // TODO 为patch dll内发生改变文件内定义的非泛型方法生成wrapper
+
         foreach(var genericMethodData in _genericInstScanner.genericMethodDatas)
         {
             foreach(var instArgs in genericMethodData.genericInsts)
