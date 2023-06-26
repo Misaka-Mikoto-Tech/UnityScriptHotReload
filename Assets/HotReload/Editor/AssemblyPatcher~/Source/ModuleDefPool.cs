@@ -145,9 +145,8 @@ public static class ModuleDefPool
 
             // property 的 getter, setter 也属于 method，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
             var data = new MethodData(typeData, method, Utils.IsLambdaMethod(method));
-            string fullName = method.ToString();
-            typeData.methods.Add(fullName, data);
-            typeData.members.Add(fullName, method);
+            typeData.methods.Add(data.fullName, data);
+            typeData.members.Add(data.fullName, method);
         }
 
         foreach (var field in typeDefinition.Fields)
@@ -214,6 +213,7 @@ public class TypeData
 public class MethodData
 {
     // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
+    public string fullName;
     public TypeData typeData;
     public MethodDef definition;
     public bool isLambda;
@@ -221,6 +221,7 @@ public class MethodData
 
     public MethodData(TypeData typeData, MethodDef definition, bool isLambda)
     {
+        fullName = definition.ToString();
         this.typeData = typeData; this.definition = definition; this.isLambda = isLambda;
         this.document = Utils.GetDocOfMethod(definition);
         if(document != null)
