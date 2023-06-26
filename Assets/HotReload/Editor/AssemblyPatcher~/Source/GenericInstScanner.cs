@@ -1,6 +1,10 @@
-﻿using dnlib.DotNet;
-using System.Collections.Generic;
-using System.Reflection.Metadata.Ecma335;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+using dnlib.DotNet;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -142,7 +146,14 @@ public class GenericInstScanner
             if (method.HasGenericParameters || method.DeclaringType.HasGenericParameters) // TODO Nested Type?
                 _gernericMethodFilter.Add(method.FullName, method.ResolveMethodDef());
             else
+            {
+                var declTypeName = method.DeclaringType.FullName;
+                if(declTypeName == GlobalConfig.kWrapperClassFullName || declTypeName.Contains("<>c")) // 跳过 wrapper 类和lambda表达式
+                    continue;
+
                 nonGenericMethodInPatch.Add(methodData);
+            }
+                
         }
 
         _scannedMethodInfos.Clear();

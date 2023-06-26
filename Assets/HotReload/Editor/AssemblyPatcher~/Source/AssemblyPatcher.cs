@@ -3,33 +3,12 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System;
-using System.Linq;
-using System.Text;
-using SimpleJSON;
-using dnlib;
-using dnlib.DotNet;
-using dnlib.DotNet.Pdb;
 
-using System.Security.Permissions;
-using SecurityAction = System.Security.Permissions.SecurityAction;
+using System.Reflection;
+using dnlib.DotNet;
 using dnlib.DotNet.Emit;
-using NHibernate.Mapping;
 using TypeDef = dnlib.DotNet.TypeDef;
-using dnlib.DotNet.MD;
-using Remotion.Linq.Parsing.Structure.NodeTypeProviders;
 using dnlib.DotNet.Writer;
-using System.Diagnostics;
-using MethodImplAttributes = dnlib.DotNet.MethodImplAttributes;
-using System.Xml.Linq;
-using MethodAttributes = dnlib.DotNet.MethodAttributes;
-using NHibernate.Mapping.ByCode;
-using System.Runtime.Loader;
 
 namespace AssemblyPatcher;
 
@@ -330,7 +309,7 @@ public class AssemblyPatcher
     DictionaryDefInfos GetDictionaryDefInfos()
     {
         var ret = new DictionaryDefInfos();
-        ret.genFuncDef = _wrapperClass.FindMethod("GetGenericInstMethodForPatch");
+        ret.genFuncDef = _wrapperClass.FindMethod("GetMethodsForPatch");
         ret.dicTypeSig = ret.genFuncDef.ReturnType; // Dictionary<MethodBase, MethodBase>
 
         TypeSpec dicType = ret.dicTypeSig.ToTypeDefOrRef() as TypeSpec;
@@ -363,7 +342,12 @@ public class AssemblyPatcher
             var allBaseMethods = assemblyDataForPatch.baseDllData.allMethods;
             foreach (var patchMethodData in _genericInstScanner.nonGenericMethodInPatch)
             {
+                // 在 base dll 中找对应的方法，找不到就是 patch dll 新增的
                 if (!allBaseMethods.TryGetValue(patchMethodData.fullName, out var baseMethodData))
+                    continue;
+
+                var baseMethod = baseMethodData.definition;
+                if (baseMethod.IsAbstract || !(baseMethod.HasBody && baseMethod.Body.HasInstructions))
                     continue;
 
                 var imporedBaseMethod = _importer.Import(baseMethodData.definition);

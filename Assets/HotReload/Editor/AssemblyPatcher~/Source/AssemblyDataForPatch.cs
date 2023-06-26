@@ -1,23 +1,15 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System;
-using System.Linq;
-using System.Text;
-using SimpleJSON;
-using dnlib;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+
 using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
 
 using static AssemblyPatcher.Utils;
-using System.Security.Permissions;
-using SecurityAction = System.Security.Permissions.SecurityAction;
-using dnlib.DotNet.Emit;
-using NHibernate.Mapping;
 using TypeDef = dnlib.DotNet.TypeDef;
-using dnlib.DotNet.MD;
 
 namespace AssemblyPatcher;
 

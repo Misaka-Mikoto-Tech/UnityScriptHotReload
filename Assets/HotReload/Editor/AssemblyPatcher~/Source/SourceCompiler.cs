@@ -1,14 +1,11 @@
-﻿//#define FOR_NET6_0_OR_GREATER
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Compression;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AssemblyPatcher;
 public class SourceCompiler
@@ -20,17 +17,17 @@ public class SourceCompiler
 
     private string _rspPath;
     private static string s_CS_File_Path__Patch_Assembly_Attr__;            // __Patch_Assembly_Attr__.cs
-    private static string s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__; // __Patch_GenericInst_Wrapper__Gen__.cs
+    private static string s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__; // __Methods_For_Patch_Wrapper__Gen__.cs
 
     private List<string> _filesToCompile = new List<string>();
 
     static SourceCompiler()
     {
         s_CS_File_Path__Patch_Assembly_Attr__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_Assembly_Attr__.cs";
-        s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_GenericInst_Wrapper__Gen__.cs";
+        s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Methods_For_Patch_Wrapper__Gen__.cs";
 
         GenCSFile__Patch_Assembly_Attr__();
-        GenCSFile__Patch_GenericInst_Wrapper__Gen__();
+        GenCSFile__Methods_For_Patch_Wrapper__Gen__();
     }
     
     public SourceCompiler(string moduleName)
@@ -88,9 +85,9 @@ public class SourceCompiler
     /// <summary>
     /// 创建文件 __Patch_GenericInst_Wrapper__Gen__.cs
     /// </summary>
-    static void GenCSFile__Patch_GenericInst_Wrapper__Gen__()
+    static void GenCSFile__Methods_For_Patch_Wrapper__Gen__()
     {
-        string text = 
+        string text =
 @"using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -98,15 +95,15 @@ using System.Reflection;
 namespace ScriptHotReload
 {
     /// <summary>
-    /// 用于 AssemblyPatcher 生成泛型实例定义的 wrapper 类型
+    /// 用于 AssemblyPatcher 生成非泛型和泛型实例定义的 wrapper 类型
     /// </summary>
-    public class __Patch_GenericInst_Wrapper__Gen__
+    public class __Methods_For_Patch_Wrapper__Gen__
     {
         /// <summary>
-        /// 扫描 base dll 里所有的泛型实例，然后获取与之关联的 patch dll 内创建的 wrapper 函数
+        /// 扫描 base dll 里所有的方法，然后获取与之关联的 patch dll 内创建的 wrapper 函数
         /// </summary>
         /// <returns></returns>
-        public static Dictionary<MethodBase, MethodBase> GetGenericInstMethodForPatch()
+        public static Dictionary<MethodBase, MethodBase> GetMethodsForPatch()
         {
             // 函数体会被 Assembly Patcher 替换
             throw new NotImplementedException();
@@ -114,7 +111,7 @@ namespace ScriptHotReload
     }
 }
 ";
-        File.WriteAllText(s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__, text, Encoding.UTF8);
+        File.WriteAllText(s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__, text, Encoding.UTF8);
     }
 
     void GenRspFile()
@@ -151,7 +148,7 @@ namespace ScriptHotReload
         sb.AppendLine("/preferreduilang:en-US");
 
         sb.AppendLine($"\"{s_CS_File_Path__Patch_Assembly_Attr__}\"");
-        sb.AppendLine($"\"{s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__}\"");
+        sb.AppendLine($"\"{s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__}\"");
         foreach (var src in _filesToCompile)
             sb.AppendLine($"\"{src}\"");
 
