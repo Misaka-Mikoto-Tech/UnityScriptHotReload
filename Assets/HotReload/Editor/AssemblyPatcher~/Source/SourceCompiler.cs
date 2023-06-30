@@ -103,14 +103,14 @@ namespace ScriptHotReload
         }
 
         /// <summary>
-        /// 当 patch dll 内所有的函数均未定义局部变量时，#Strings 堆不会存在于pdb文件中，但mono默认认为此堆存在，且去检验，会导致crash
+        /// 当 patch dll 内所有的函数均未定义局部变量时，#Strings heap 不会被dnlib写入pdb文件中，但mono认为此heap必定存在，且会去检验，这会导致crash
         /// 因此我们这里放一个无用的局部变量强制创建 #Strings heap
         /// </summary>
         [MethodImpl(MethodImplOptions.NoOptimization)]
-        private static string ___UnUsed_Method_To_Avoid_Dblib_Bug___(string str)
+        private static string ___UnUsed_Method_To_Avoid_Dnlib_Bug___(string str)
         {
-            string unusedVar = str + ""this is a unused var to avoid dnlib's bug, dont remove!"";
-            return unusedVar;
+            string uselessVar = str + ""This is a useless variable used to avoid dnlib's bug, please don't remove it!"";
+            return uselessVar;
         }
     }
 }
