@@ -403,9 +403,11 @@ public class AssemblyPatcher
         // 重命名 dll 名字
         assemblyDataForPatch.patchDllData.Unload();
         File.Delete(patchPath);
-        File.Delete(patchPdbPath);
+        if(File.Exists(patchPdbPath))
+            File.Delete(patchPdbPath);
         File.Move(tmpPath, patchPath);
-        File.Move(tmpPdbPath, patchPdbPath);
+        if(File.Exists(tmpPdbPath))
+            File.Move(tmpPdbPath, patchPdbPath);
     }
 
 
