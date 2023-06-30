@@ -179,7 +179,9 @@ namespace ScriptHotReload
         partialClassScanner.Scan();
 
         _filesToCompile.Clear();
+        _filesToCompile.AddRange(fileChanged);
         _filesToCompile.AddRange(partialClassScanner.allFilesNeeded);
+        _filesToCompile = new List<string>(_filesToCompile.Distinct());
     }
 
     int RunDotnetCompileProcess()
