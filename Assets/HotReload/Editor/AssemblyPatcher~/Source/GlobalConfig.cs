@@ -1,9 +1,11 @@
-﻿using SimpleJSON;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+using SimpleJSON;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AssemblyPatcher;
 
@@ -11,7 +13,7 @@ public class GlobalConfig
 {
     public static GlobalConfig Instance;
 
-    public const string kWrapperClassFullName = "ScriptHotReload.__Patch_GenericInst_Wrapper__Gen__";
+    public const string kWrapperClassFullName = "ScriptHotReload.__Methods_For_Patch_Wrapper__Gen__";
 
     public int patchNo;
     public string workDir;

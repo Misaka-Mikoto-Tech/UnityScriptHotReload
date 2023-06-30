@@ -3,14 +3,9 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
+
 using System.Security.Cryptography;
-using System;
 using System.Reflection;
-using System.Linq;
-using dnlib;
 using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
 using dnlib.DotNet.Emit;

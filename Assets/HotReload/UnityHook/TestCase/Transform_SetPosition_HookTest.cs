@@ -1,4 +1,4 @@
-#if ENABLE_HOOK_TEST_CASE || true
+#if ENABLE_HOOK_TEST_CASE
 /*
  * 对 Transform.SetPosition 进行hook的测试用例
  */

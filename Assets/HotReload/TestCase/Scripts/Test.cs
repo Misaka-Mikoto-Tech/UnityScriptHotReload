@@ -11,6 +11,7 @@ public class Test : MonoBehaviour
 {
     public Button btnTest;
     public Button btnApplyPatch;
+    public Button btnPartialClass;
 
     public void GFuncA<T>(T obj)
     {
@@ -37,6 +38,7 @@ public class Test : MonoBehaviour
 
         btnTest.onClick.AddListener(OnBtnTest);
         btnApplyPatch.onClick.AddListener(OnBtnApplyPatch);
+        btnPartialClass.onClick.AddListener(OnBtnPartialClass);
 
         NS_Test.TestCls.s_val = 456;
         NS_Test.Test4.val = 1234;
@@ -108,6 +110,14 @@ public class Test : MonoBehaviour
     {
         MethodHook.onlyShowAddr = false;
         MethodHook.ProcessWaitHooks();
+    }
+
+    void OnBtnPartialClass()
+    {
+        var partialClass = new NS_Test.NS_Test_Inner2.TestPartialClass();
+        partialClass.x = 3;
+        partialClass.y_partial = "partial test str";
+        partialClass.DoTest();
     }
 
     static Type ParseType(string typeName)

@@ -1,4 +1,10 @@
-﻿using SimpleJSON;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+using SimpleJSON;
 using System.Diagnostics;
 using System.Text;
 

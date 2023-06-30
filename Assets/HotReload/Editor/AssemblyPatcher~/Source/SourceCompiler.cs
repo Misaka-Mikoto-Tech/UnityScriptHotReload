@@ -1,14 +1,11 @@
-﻿//#define FOR_NET6_0_OR_GREATER
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Compression;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AssemblyPatcher;
 public class SourceCompiler
@@ -20,15 +17,17 @@ public class SourceCompiler
 
     private string _rspPath;
     private static string s_CS_File_Path__Patch_Assembly_Attr__;            // __Patch_Assembly_Attr__.cs
-    private static string s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__; // __Patch_GenericInst_Wrapper__Gen__.cs
+    private static string s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__; // __Methods_For_Patch_Wrapper__Gen__.cs
+
+    private List<string> _filesToCompile = new List<string>();
 
     static SourceCompiler()
     {
         s_CS_File_Path__Patch_Assembly_Attr__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_Assembly_Attr__.cs";
-        s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_GenericInst_Wrapper__Gen__.cs";
+        s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Methods_For_Patch_Wrapper__Gen__.cs";
 
         GenCSFile__Patch_Assembly_Attr__();
-        GenCSFile__Patch_GenericInst_Wrapper__Gen__();
+        GenCSFile__Methods_For_Patch_Wrapper__Gen__();
     }
     
     public SourceCompiler(string moduleName)
@@ -51,7 +50,8 @@ public class SourceCompiler
         }
 
         _rspPath = GlobalConfig.Instance.tempScriptDir + $"/__{moduleName}_Patch.rsp";
-        
+
+        GetAllFilesToCompile();
         GenRspFile();
         int retCode = RunDotnetCompileProcess();
         return retCode;
@@ -85,33 +85,45 @@ public class SourceCompiler
     /// <summary>
     /// 创建文件 __Patch_GenericInst_Wrapper__Gen__.cs
     /// </summary>
-    static void GenCSFile__Patch_GenericInst_Wrapper__Gen__()
+    static void GenCSFile__Methods_For_Patch_Wrapper__Gen__()
     {
-        string text = 
+        string text =
 @"using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace ScriptHotReload
 {
     /// <summary>
-    /// 用于 AssemblyPatcher 生成泛型实例定义的 wrapper 类型
+    /// 用于 AssemblyPatcher 生成非泛型和泛型实例定义的 wrapper 类型
     /// </summary>
-    public class __Patch_GenericInst_Wrapper__Gen__
+    public class __Methods_For_Patch_Wrapper__Gen__
     {
         /// <summary>
-        /// 扫描 base dll 里所有的泛型实例，然后获取与之关联的 patch dll 内创建的 wrapper 函数
+        /// 扫描 base dll 里所有的方法，然后获取与之关联的 patch dll 内创建的 wrapper 函数
         /// </summary>
         /// <returns></returns>
-        public static Dictionary<MethodBase, MethodBase> GetGenericInstMethodForPatch()
+        public static Dictionary<MethodBase, MethodBase> GetMethodsForPatch()
         {
             // 函数体会被 Assembly Patcher 替换
             throw new NotImplementedException();
         }
+
+        /// <summary>
+        /// 当 patch dll 内所有的函数均未定义局部变量时，#Strings 堆不会存在于pdb文件中，但mono默认认为此堆存在，且去检验，会导致crash
+        /// 因此我们这里放一个无用的局部变量强制创建 #Strings heap
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoOptimization)]
+        private static string ___UnUsed_Method_To_Avoid_Dblib_Bug___(string str)
+        {
+            string unusedVar = str + ""this is a unused var to avoid dnlib's bug, dont remove!"";
+            return unusedVar;
+        }
     }
 }
 ";
-        File.WriteAllText(s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__, text, Encoding.UTF8);
+        File.WriteAllText(s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__, text, Encoding.UTF8);
     }
 
     void GenRspFile()
@@ -148,11 +160,26 @@ namespace ScriptHotReload
         sb.AppendLine("/preferreduilang:en-US");
 
         sb.AppendLine($"\"{s_CS_File_Path__Patch_Assembly_Attr__}\"");
-        sb.AppendLine($"\"{s_CS_File_Path__Patch_GenericInst_Wrapper__Gen__}\"");
-        foreach (var src in GlobalConfig.Instance.filesToCompile[moduleName])
+        sb.AppendLine($"\"{s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__}\"");
+        foreach (var src in _filesToCompile)
             sb.AppendLine($"\"{src}\"");
 
         File.WriteAllText(_rspPath, sb.ToString(), Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 获取所有需要编译的文件，包括已改变的文件和可能的partial class所在的其它文件（只参与编译不会被hook）
+    /// </summary>
+    /// <remarks>需要像生成泛型pair一样生成返回所有hook pair的方法，而不是让主程序自己反射去读取，因为反射无法获取方法所在文件</remarks>
+    void GetAllFilesToCompile()
+    {
+        var fileChanged = GlobalConfig.Instance.filesToCompile[moduleName];
+        var defines = GlobalConfig.Instance.defines;
+        var partialClassScanner = new PartialClassScanner(moduleName, fileChanged, defines);
+        partialClassScanner.Scan();
+
+        _filesToCompile.Clear();
+        _filesToCompile.AddRange(partialClassScanner.allFilesNeeded);
     }
 
     int RunDotnetCompileProcess()
@@ -176,9 +203,9 @@ namespace ScriptHotReload
         {
             if (args.Data != null)
             {
-                if (args.Data.StartsWith("error"))
+                if (args.Data.Contains("error "))
                     Debug.LogError(args.Data);
-                else if(args.Data.StartsWith("warning"))
+                else if(args.Data.Contains("warning "))
                     Debug.LogWarning(args.Data);
                 else
                     Debug.Log(args.Data);

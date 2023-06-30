@@ -1,14 +1,13 @@
-﻿using dnlib.DotNet;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+using dnlib.DotNet;
 using dnlib.DotNet.Pdb;
-using NHibernate.Mapping;
 using SimpleJSON;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using TypeDef = dnlib.DotNet.TypeDef;
 
 namespace AssemblyPatcher;
@@ -140,14 +139,13 @@ public static class ModuleDefPool
 
         foreach (var method in typeDefinition.Methods)
         {
-            if (method.IsAbstract || !method.HasBody)
+            if (method.IsAbstract || !(method.HasBody && method.Body.HasInstructions))
                 continue;
 
             // property 的 getter, setter 也属于 method，且 IsGetter, IsSetter 字段会设置为 true, 因此无需单独遍历 properties
             var data = new MethodData(typeData, method, Utils.IsLambdaMethod(method));
-            string fullName = method.ToString();
-            typeData.methods.Add(fullName, data);
-            typeData.members.Add(fullName, method);
+            typeData.methods.Add(data.fullName, data);
+            typeData.members.Add(data.fullName, method);
         }
 
         foreach (var field in typeDefinition.Fields)
@@ -176,8 +174,14 @@ public class ModuleDefData
     public ModuleRefUser moduleRef;
 
     public Dictionary<string, TypeData> types;
-    public Dictionary<string, MethodData> allMethods; // 所有方法，用于快速访问
-    public Dictionary<string, IMemberRef> allMembers; // 所有的方法，字段，事件，属性，用于快速访问
+    /// <summary>
+    /// 当前Module所有的非纯虚并且Body非空的方法集合, 用于快速访问
+    /// </summary>
+    public Dictionary<string, MethodData> allMethods;
+    /// <summary>
+    /// 当前Module所有的方法，字段，事件，属性，用于快速访问
+    /// </summary>
+    public Dictionary<string, IMemberRef> allMembers;
 
     public void Unload()
     {
@@ -204,13 +208,20 @@ public class TypeData
     public TypeData parent;
     public TypeData childLambdaStaticType; // TypeName/<>c
 
+    /// <summary>
+    /// 当前类型所有的非纯虚并且Body非空的方法集合
+    /// </summary>
     public Dictionary<string, MethodData> methods = new Dictionary<string, MethodData>();
     public Dictionary<string, IMemberRef> members = new Dictionary<string, IMemberRef>(); // 方法，字段，事件，属性
+    public HashSet<PdbDocument> pdbDocuments = new HashSet<PdbDocument>();
+
+    public override string ToString() => definition.ToString();
 }
 
 public class MethodData
 {
     // 不会记录 GenericInstanceMethod, FixMethod 时遇到会动态创建并替换
+    public string fullName;
     public TypeData typeData;
     public MethodDef definition;
     public bool isLambda;
@@ -218,8 +229,11 @@ public class MethodData
 
     public MethodData(TypeData typeData, MethodDef definition, bool isLambda)
     {
+        fullName = definition.ToString();
         this.typeData = typeData; this.definition = definition; this.isLambda = isLambda;
         this.document = Utils.GetDocOfMethod(definition);
+        if(document != null)
+            typeData.pdbDocuments.Add(document);
     }
 
     public JSONNode ToJsonNode()

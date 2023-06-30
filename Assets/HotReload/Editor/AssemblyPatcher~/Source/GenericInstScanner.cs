@@ -1,6 +1,10 @@
-﻿using dnlib.DotNet;
-using System.Collections.Generic;
-using System.Reflection.Metadata.Ecma335;
+﻿/*
+ * Author: Misaka Mikoto
+ * email: easy66@live.com
+ * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
+ */
+
+using dnlib.DotNet;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -88,6 +92,11 @@ public class GenericMethodData
 public class GenericInstScanner
 {
     public List<GenericMethodData> genericMethodDatas { get; private set; } = new List<GenericMethodData>();
+    /// <summary>
+    /// patch dll 内发生改变文件定义的非泛型方法。
+    /// </summary>
+    /// <remarks>TODO 此处不合适，只是顺便扫描，考虑放到更合适的位置</remarks>
+    public List<MethodData> nonGenericMethodInPatch { get; private set; } = new List<MethodData>();
 
     private Dictionary<string, ScannedTypeSpecs> _typeSpecDic = new Dictionary<string, ScannedTypeSpecs>();
     private AssemblyDataForPatch    _assemblyDataForPatch;
@@ -115,12 +124,36 @@ public class GenericInstScanner
     /// <returns></returns>
     public void Scan()
     {
+        // Document.Url 是当前平台默认分隔符的全路径，此处提前转换一下
+        var fileChanged = new List<string>();
+        char spliter = Path.DirectorySeparatorChar;
+        foreach (var f in GlobalConfig.Instance.filesToCompile[_assemblyDataForPatch.name])
+        {
+            var fullPath = $"{Environment.CurrentDirectory}{spliter}{f.Replace('/', spliter)}";
+            fileChanged.Add(fullPath);
+        }
+
         _gernericMethodFilter = new Dictionary<string, MethodDef>();
+        nonGenericMethodInPatch.Clear();
         foreach (var (_, methodData) in _assemblyDataForPatch.patchDllData.allMethods)
         {
+            // 只对发生改变的源码文件内定义的方法生成wrapper
+            // 没有 document 的也不处理（编译器自动生成的默认方法）
+            if (methodData.document == null || !fileChanged.Contains(methodData.document.Url))
+                continue;
+
             var method = methodData.definition;
             if (method.HasGenericParameters || method.DeclaringType.HasGenericParameters) // TODO Nested Type?
                 _gernericMethodFilter.Add(method.FullName, method.ResolveMethodDef());
+            else
+            {
+                var declTypeName = method.DeclaringType.FullName;
+                if(declTypeName == GlobalConfig.kWrapperClassFullName || declTypeName.Contains("<>c")) // 跳过 wrapper 类和lambda表达式
+                    continue;
+
+                nonGenericMethodInPatch.Add(methodData);
+            }
+                
         }
 
         _scannedMethodInfos.Clear();

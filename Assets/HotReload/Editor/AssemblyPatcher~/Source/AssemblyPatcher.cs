@@ -3,33 +3,12 @@
  * email: easy66@live.com
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System;
-using System.Linq;
-using System.Text;
-using SimpleJSON;
-using dnlib;
-using dnlib.DotNet;
-using dnlib.DotNet.Pdb;
 
-using System.Security.Permissions;
-using SecurityAction = System.Security.Permissions.SecurityAction;
+using System.Reflection;
+using dnlib.DotNet;
 using dnlib.DotNet.Emit;
-using NHibernate.Mapping;
 using TypeDef = dnlib.DotNet.TypeDef;
-using dnlib.DotNet.MD;
-using Remotion.Linq.Parsing.Structure.NodeTypeProviders;
 using dnlib.DotNet.Writer;
-using System.Diagnostics;
-using MethodImplAttributes = dnlib.DotNet.MethodImplAttributes;
-using System.Xml.Linq;
-using MethodAttributes = dnlib.DotNet.MethodAttributes;
-using NHibernate.Mapping.ByCode;
-using System.Runtime.Loader;
 
 namespace AssemblyPatcher;
 
@@ -135,7 +114,7 @@ public class AssemblyPatcher
 
         FixNewAssembly();
         GenGenericMethodWrappers();
-        GenRuntimeGenericInstMethodInfosGetFunc();
+        GenRuntimeMethodsGetter();
         isValid = true;
         return isValid;
     }
@@ -330,7 +309,7 @@ public class AssemblyPatcher
     DictionaryDefInfos GetDictionaryDefInfos()
     {
         var ret = new DictionaryDefInfos();
-        ret.genFuncDef = _wrapperClass.FindMethod("GetGenericInstMethodForPatch");
+        ret.genFuncDef = _wrapperClass.FindMethod("GetMethodsForPatch");
         ret.dicTypeSig = ret.genFuncDef.ReturnType; // Dictionary<MethodBase, MethodBase>
 
         TypeSpec dicType = ret.dicTypeSig.ToTypeDefOrRef() as TypeSpec;
@@ -345,9 +324,9 @@ public class AssemblyPatcher
     }
 
     /// <summary>
-    /// 生成运行时动态获取Base Dll内的泛型实例方法与Patch Dll内的Wrapper方法关联的函数
+    /// 生成运行时动态获取Base Dll内的非泛型和泛型实例方法与Patch Dll内的Wrapper方法关联的函数
     /// </summary>
-    void GenRuntimeGenericInstMethodInfosGetFunc()
+    void GenRuntimeMethodsGetter()
     {
         var dicDefInfos = GetDictionaryDefInfos();
         var genFuncDef = dicDefInfos.genFuncDef;
@@ -357,14 +336,42 @@ public class AssemblyPatcher
         var instructions = genFuncDef.Body.Instructions;
 
         instructions.Add(Instruction.Create(OpCodes.Newobj, dicDefInfos.dicCtor));    // newobj Dictionary<MethodInfo, MethodInfo>.ctor()
+
+        // 为patch dll内发生改变文件内定义的非泛型方法生成wrapper映射
+        {
+            var allBaseMethods = assemblyDataForPatch.baseDllData.allMethods;
+            foreach (var patchMethodData in _genericInstScanner.nonGenericMethodInPatch)
+            {
+                // 在 base dll 中找对应的方法，找不到就是 patch dll 新增的
+                if (!allBaseMethods.TryGetValue(patchMethodData.fullName, out var baseMethodData))
+                    continue;
+
+                var baseMethod = baseMethodData.definition;
+                if (baseMethod.IsAbstract || !(baseMethod.HasBody && baseMethod.Body.HasInstructions))
+                    continue;
+
+                var imporedBaseMethod = _importer.Import(baseMethodData.definition);
+                var importedBaseType = _importer.Import(baseMethodData.definition.DeclaringType);
+
+                instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, imporedBaseMethod));           // ldtoken key
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseType));            // ldtoken key_type
+                instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, patchMethodData.definition));  // ldtoken value
+                instructions.Add(Instruction.Create(OpCodes.Ldtoken, patchMethodData.definition.DeclaringType));    // ldtoken _wrapperClass
+                instructions.Add(Instruction.Create(OpCodes.Call, _getMethodFromHandle_2));         // call GetMethodFromHandle
+                instructions.Add(Instruction.Create(OpCodes.Callvirt, dicDefInfos.dicAdd));         // callvirt Add
+            }
+        }
         
-        foreach(var genericMethodData in _genericInstScanner.genericMethodDatas)
+        // 为泛型方法生成wrapper映射
+        foreach (var genericMethodData in _genericInstScanner.genericMethodDatas)
         {
             foreach(var instArgs in genericMethodData.genericInsts)
             {
                 var importedBaseInstMethod = _importer.Import(instArgs.instMethodInBase);
                 var importedBaseType = _importer.Import(instArgs.instMethodInBase.DeclaringType);
-                var patchType = instArgs.instMethodInPatch.DeclaringType;
+                //var patchType = instArgs.instMethodInPatch.DeclaringType;
 
                 instructions.Add(Instruction.Create(OpCodes.Dup));                                  // dup  (dicObj->this)
                 instructions.Add(Instruction.Create(OpCodes.Ldtoken, importedBaseInstMethod));      // ldtoken key
@@ -396,9 +403,11 @@ public class AssemblyPatcher
         // 重命名 dll 名字
         assemblyDataForPatch.patchDllData.Unload();
         File.Delete(patchPath);
-        File.Delete(patchPdbPath);
+        if(File.Exists(patchPdbPath))
+            File.Delete(patchPdbPath);
         File.Move(tmpPath, patchPath);
-        File.Move(tmpPdbPath, patchPdbPath);
+        if(File.Exists(tmpPdbPath))
+            File.Move(tmpPdbPath, patchPdbPath);
     }
 
 
