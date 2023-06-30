@@ -91,6 +91,7 @@ public class SourceCompiler
 @"using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace ScriptHotReload
 {
@@ -113,11 +114,11 @@ namespace ScriptHotReload
         /// 当 patch dll 内所有的函数均未定义局部变量时，#Strings 堆不会存在于pdb文件中，但mono默认认为此堆存在，且去检验，会导致crash
         /// 因此我们这里放一个无用的局部变量强制创建 #Strings heap
         /// </summary>
-        private static void ___UnUsed_Method_To_Avoid_Dblib_Bug___()
+        [MethodImpl(MethodImplOptions.NoOptimization)]
+        private static string ___UnUsed_Method_To_Avoid_Dblib_Bug___(string str)
         {
-#pragma warning disable CS0219
-            string unusedVar = ""this is a unused var to avoid dnlib's bug, dont remove!"";
-#pragma warning restore
+            string unusedVar = str + ""this is a unused var to avoid dnlib's bug, dont remove!"";
+            return unusedVar;
         }
     }
 }
