@@ -55,6 +55,29 @@ public static class Utils
             File.Delete(file);
     }
 
+    /// <summary>
+    /// 删除文件时文件可能正在被占用，此函数会多次尝试删除
+    /// </summary>
+    /// <param name="filePath"></param>
+    /// <param name="retryCount"></param>
+    public static void DeleteFileWithRetry(string filePath, int retryCount = 3, int retrySleep = 100)
+    {
+        int retry = 0;
+        while(retry++ < retryCount)
+        {
+            try
+            {
+                File.Delete(filePath);
+                return;
+            }
+            catch
+            {
+                Thread.Sleep(retrySleep);
+            }
+        }
+        Debug.LogError($"删除文件失败:{filePath}");
+    }
+
     public static BindingFlags BuildBindingFlags(MethodDef definition)
     {
         BindingFlags flags = BindingFlags.Default;

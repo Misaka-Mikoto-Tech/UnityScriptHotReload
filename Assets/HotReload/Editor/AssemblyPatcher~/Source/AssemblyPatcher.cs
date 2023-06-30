@@ -400,11 +400,15 @@ public class AssemblyPatcher
         var opt = new ModuleWriterOptions(assemblyDataForPatch.patchDllData.moduleDef) { WritePdb = true };
         assemblyDataForPatch.patchDllData.moduleDef.Write(tmpPath, opt);
 
+        // 解除文件占用
+        assemblyDataForPatch.baseDllData.Unload();
+        assemblyDataForPatch.patchDllData.Unload();
+
         // 重命名 dll 名字
         assemblyDataForPatch.patchDllData.Unload();
-        File.Delete(patchPath);
+        Utils.DeleteFileWithRetry(patchPath);
         if(File.Exists(patchPdbPath))
-            File.Delete(patchPdbPath);
+            Utils.DeleteFileWithRetry(patchPdbPath);
         File.Move(tmpPath, patchPath);
         if(File.Exists(tmpPdbPath))
             File.Move(tmpPdbPath, patchPdbPath);

@@ -38,16 +38,8 @@ public class SourceCompiler
     
     public int DoCompile()
     {
-        try
-        {
-            // 偶尔会出现删除失败，但编译完成之后也许又无占用了，所以也许可以允许失败？
-            File.Delete(outputPath);
-            File.Delete(Path.ChangeExtension(outputPath, ".pdb"));
-        }
-        catch(Exception ex)
-        {
-            Console.WriteLine($"删除文件失败:{ex.Message}");
-        }
+        Utils.DeleteFileWithRetry(outputPath);
+        Utils.DeleteFileWithRetry(Path.ChangeExtension(outputPath, ".pdb"));
 
         _rspPath = GlobalConfig.Instance.tempScriptDir + $"/__{moduleName}_Patch.rsp";
 
