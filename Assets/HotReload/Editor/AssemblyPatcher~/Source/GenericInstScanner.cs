@@ -198,7 +198,7 @@ public class GenericInstScanner
                 _typeSpecDic.Add(genericName, typeSpecsInfo);
             }
 
-            // 前天合并泛型参数类型，减少CrossGen的数量（此处不合并最后合并阶段也会被合并，但是中间运算量会变大）
+            // 提前合并泛型参数类型，减少CrossGen的数量（此处不合并最后合并阶段也会被合并，但是中间运算量会变大）
             var sig = ts.TypeSig.RemovePinnedAndModifiers();
             if (sig is SZArraySig) // 数组类型的不记录，因为不会存在数组类型的 MethodSpec 这种情况
                 continue;
