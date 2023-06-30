@@ -142,6 +142,10 @@ public class GenericInstScanner
             if (methodData.document == null || !fileChanged.Contains(methodData.document.Url))
                 continue;
 
+            // lambda 无法精确匹配故忽略，静态构造函数hook没意义
+            if (methodData.isLambda || methodData.definition.Name == ".cctor")
+                continue;
+
             var method = methodData.definition;
             if (method.HasGenericParameters || method.DeclaringType.HasGenericParameters) // TODO Nested Type?
                 _gernericMethodFilter.Add(method.FullName, method.ResolveMethodDef());
@@ -232,6 +236,7 @@ public class GenericInstScanner
     {
         var assembly = _baseModuleDef.Assembly;
 
+        // 经过查看dll内容，.cctor 不会出现这里，略感奇怪（反正我们也不需要它）
         uint count = _baseModuleDef.Metadata.TablesStream.MemberRefTable.Rows;
         for (uint i = 1; i <= count; i++) // rowID 从1开始计数
         {

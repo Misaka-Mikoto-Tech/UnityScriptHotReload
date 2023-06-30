@@ -39,6 +39,26 @@ namespace NS_Test_Generic
 
     public class TestClsG<T>
     {
+
+        static TestClsG()
+        {
+#if APPLY_PATCH
+            // 注意： Patch后这一行不应该被执行!
+            Debug.Log($"Patched TestClsG<T>.cctor() with T:{typeof(T).Name}");
+#else
+            Debug.Log($"Ori TestClsG<T>.cctor() with T:{typeof(T).Name}");
+#endif
+        }
+
+        public TestClsG()
+        {
+#if APPLY_PATCH
+            Debug.Log($"Patched TestClsG<T>.ctor() with T:{typeof(T).Name}");
+#else
+            Debug.Log($"Ori TestClsG<T>.ctor() with T:{typeof(T).Name}");
+#endif
+        }
+
         public int Show_Test(int x)
         {
             EditorUtility.DisplayDialog("title4.3", "text4.3", "OK");
