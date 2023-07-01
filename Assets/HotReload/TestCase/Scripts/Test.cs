@@ -46,6 +46,9 @@ public class Test : MonoBehaviour
 
     void OnBtnTest()
     {
+        string projVer = NS_Test.TestUsingVar.ReadProjVersion();
+        Debug.Log(projVer);
+
         Debug.Log($"Test3.s_val={NS_Test_Generic.TestCls.s_val}");
 
         var test = new NS_Test_Generic.TestCls();
