@@ -102,7 +102,14 @@ namespace ScriptHotReload
 #endif
             var unityEditorPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
             _dotnetPath = Directory.GetFiles(unityEditorPath, dotnetName, SearchOption.AllDirectories).FirstOrDefault().Replace('\\', '/');
-            _cscPath = Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories).FirstOrDefault().Replace('\\', '/');
+
+            // unity 2020 里有两个 csc.dll，我们选择Tools目录下的
+            _cscPath = (from f in Directory.GetFiles(unityEditorPath, cscName, SearchOption.AllDirectories) 
+                        let dir = Path.GetDirectoryName(f) 
+                        where dir.Contains("Tools")
+                        || dir.Contains("DotNetSdkRoslyn")
+                        select f)
+                .FirstOrDefault().Replace('\\', '/');
 
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_dotnetPath));
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(_cscPath));
