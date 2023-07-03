@@ -53,7 +53,19 @@ namespace NS_Test_Generic
         public TestClsG()
         {
 #if APPLY_PATCH
-            Debug.Log($"Patched TestClsG<T>.ctor() with T:{typeof(T).Name}");
+            EditorUtility.DisplayDialog("title4.2.0", "TestClsG<T>.ctor()", "OK");
+            string str = "abc";
+            EditorUtility.DisplayDialog("title4.2.0.1", $"TestClsG<T>.ctor(), {str}", "OK");
+            Debug.Log(str);
+            EditorUtility.DisplayDialog("title4.2.0.2", "TestClsG<T>.ctor()", "OK");
+            var t = typeof(T);
+            EditorUtility.DisplayDialog("title4.2.1", "TestClsG<T>.ctor()", "OK");
+            var tName = t.Name;
+            EditorUtility.DisplayDialog("title4.2.2", "TestClsG<T>.ctor()", "OK");
+            var msg = $"Patched TestClsG<T>.ctor() with T:{tName}";
+            EditorUtility.DisplayDialog("title4.2.3", "TestClsG<T>.ctor()", "OK");
+            Debug.Log(msg);
+            EditorUtility.DisplayDialog("title4.2.4", "TestClsG<T>.ctor()", "OK");
 #else
             Debug.Log($"Ori TestClsG<T>.ctor() with T:{typeof(T).Name}");
 #endif
