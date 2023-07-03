@@ -262,19 +262,21 @@ public class GenericInstScanner
                 continue;
 
             var typeSpec = declType as TypeSpecMD;
-
             /*
              * eg. {System.Boolean NS_Test.TestClsG`1<UnityEngine.Vector3>::FuncA(System.Int32)}
              *      to => 
              */
-            var resoledMethod = mr.ResolveMethod();
-            if(_gernericMethodFilter.TryGetValue(resoledMethod.FullName, out var patchMethodDef))
+            var resolvedMethod = mr.ResolveMethod();
+            if (resolvedMethod is null) // 某些 declType 是个二维数组, 其方法无法被Resolve，这种方法不算为泛型
+                continue;
+            
+            if(_gernericMethodFilter.TryGetValue(resolvedMethod.FullName, out var patchMethodDef))
             {
                 var sig = typeSpec.TypeSig as GenericInstSig;
 
                 var instData = new ScannedMethodInfo();
                 instData.method = mr;
-                instData.genericMethodInBase = resoledMethod;
+                instData.genericMethodInBase = resolvedMethod;
                 instData.genericMethodInPatch = patchMethodDef;
                 instData.typeGenArgs =new List<TypeSig>(sig.GenericArguments);
                 instData.methodGenArgs = new List<TypeSig>();
@@ -306,6 +308,9 @@ public class GenericInstScanner
 
             // 获取实例类型的泛型原始类型
             var resolvedMethod = ms.Method.ResolveMethodDef();
+            if (resolvedMethod is null) // 某些 declType 是个二维数组, 其方法无法被Resolve，这种方法不算为泛型
+                continue;
+
             var fullName = resolvedMethod.FullName;
             if (!_gernericMethodFilter.TryGetValue(fullName, out var patchMethodDef))
                 continue;
