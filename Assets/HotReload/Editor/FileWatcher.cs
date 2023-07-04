@@ -132,7 +132,10 @@ namespace ScriptHotReload
             var filePath = e.FullPath.Replace('\\', '/').Substring(Environment.CurrentDirectory.Length + 1);
             if (filePath.Contains("/HotReload/Editor/")) return; // 插件自身路径，不reload
 
-            if(!File.Exists(filePath)) return;
+            if (HotReloadConfig.fileShouldIgnore(filePath))
+                return;
+
+            if (!File.Exists(filePath)) return;
 
             var now = DateTime.Now;
             lock(_locker)

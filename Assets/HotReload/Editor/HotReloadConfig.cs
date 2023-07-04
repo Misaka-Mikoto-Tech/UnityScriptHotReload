@@ -4,6 +4,7 @@
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -43,6 +44,22 @@ namespace ScriptHotReload
                 Directory.CreateDirectory(kTempScriptDir);
             }
         }
+
+        /// <summary>
+        /// 变动文件是否需要被忽略，不想被reload的文件返回true即可
+        /// </summary>
+        /// <remarks>/HotReload/Editor/目录下的默认被过滤</remarks>
+        public static Func<string, bool> fileShouldIgnore = path =>
+        {
+            /*
+             * eg.
+             * if(path.Contains("auto_gen"))
+             *     return true;
+             *  return false;
+             */
+
+            return false;
+        };
 
     }
 
