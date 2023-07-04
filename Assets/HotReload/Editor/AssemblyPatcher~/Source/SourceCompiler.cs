@@ -53,17 +53,17 @@ public class SourceCompiler
         GenCSFile__Patch_Assembly_Attr__();
 
         GetAllFilesToCompile();
-        GenRspFile();
-
+        
         int retCode = 0;
+
         Stopwatch sw = new Stopwatch();
         sw.Start();
 #if COMPILE_WITH_ROSLYN
-        bool isOK = CompilePatchDllWithRoslyn();
-        retCode = isOK ? 0 : -1;
+        retCode = CompilePatchDllWithRoslyn() ? 0 : -1;
         sw.Stop();
         Console.WriteLine($"Roslyn编译耗时: {sw.ElapsedMilliseconds}ms");
 #else
+        GenRspFile();
         retCode = RunDotnetCompileProcess();
         sw.Stop();
         Console.WriteLine($"csc编译耗时: {sw.ElapsedMilliseconds}ms");
@@ -184,8 +184,6 @@ namespace System.Runtime.CompilerServices
         sb.AppendLine("/utf8output");
         sb.AppendLine("/preferreduilang:en-US");
 
-        sb.AppendLine($"\"{s_CS_File_Path__Patch_Assembly_Attr__}\"");
-        sb.AppendLine($"\"{s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__}\"");
         foreach (var src in _filesToCompile)
             sb.AppendLine($"\"{src}\"");
 
