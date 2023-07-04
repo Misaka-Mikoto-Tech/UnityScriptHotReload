@@ -4,7 +4,13 @@
  * github: https://github.com/Misaka-Mikoto-Tech/UnityScriptHotReload
  */
 
+#define COMPILE_WITH_ROSLYN
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 
 namespace AssemblyPatcher;
@@ -20,13 +26,14 @@ public class SourceCompiler
     private static string s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__; // __Methods_For_Patch_Wrapper__Gen__.cs
 
     private List<string> _filesToCompile = new List<string>();
+    private PartialClassScanner _partialClassScanner;
+    private List<SyntaxTree> _syntaxTrees;
 
     static SourceCompiler()
     {
         s_CS_File_Path__Patch_Assembly_Attr__ = GlobalConfig.Instance.tempScriptDir + $"/__Patch_Assembly_Attr__.cs";
         s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__ = GlobalConfig.Instance.tempScriptDir + $"/__Methods_For_Patch_Wrapper__Gen__.cs";
 
-        GenCSFile__Patch_Assembly_Attr__();
         GenCSFile__Methods_For_Patch_Wrapper__Gen__();
     }
     
@@ -43,35 +50,23 @@ public class SourceCompiler
 
         _rspPath = GlobalConfig.Instance.tempScriptDir + $"/__{moduleName}_Patch.rsp";
 
+        GenCSFile__Patch_Assembly_Attr__();
+
         GetAllFilesToCompile();
         GenRspFile();
-        int retCode = RunDotnetCompileProcess();
-        return retCode;
-    }
 
-    /// <summary>
-    /// 创建文件 __Patch_Assembly_Attr__.cs
-    /// </summary>
-    static void GenCSFile__Patch_Assembly_Attr__()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Diagnostics;");
-        sb.AppendLine("using System.Reflection;");
-        sb.AppendLine("using System.Runtime.CompilerServices;");
-        sb.AppendLine("using System.Security.Permissions;");
-        sb.AppendLine();
-        sb.AppendLine("[assembly: Debuggable(DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations | DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints | DebuggableAttribute.DebuggingModes.EnableEditAndContinue)]");
-
-#if FOR_NET6_0_OR_GREATER
-        // for .netcore or newer
-        sb.AppendLine($"[assembly: IgnoresAccessChecksTo(\"{_moduleName}\")]");
+        int retCode = 0;
+        Stopwatch sw = new Stopwatch();
+        sw.Start();
+#if COMPILE_WITH_ROSLYN
+        bool isOK = CompilePatchDllWithRoslyn();
+        retCode = isOK ? 1 : 0;
 #else
-        // for .net framework
-        sb.AppendLine("[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]");
+        retCode = RunDotnetCompileProcess();
 #endif
-
-        File.WriteAllText(s_CS_File_Path__Patch_Assembly_Attr__, sb.ToString(), Encoding.UTF8);
+        sw.Stop();
+        Console.WriteLine($"编译耗时: {sw.ElapsedMilliseconds}ms");
+        return retCode;
     }
 
     /// <summary>
@@ -116,6 +111,41 @@ namespace ScriptHotReload
 }
 ";
         File.WriteAllText(s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__, text, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// 创建文件 __Patch_Assembly_Attr__.cs
+    /// </summary>
+    void GenCSFile__Patch_Assembly_Attr__()
+    {
+        string text =
+@"using System;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Security.Permissions;
+
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations | DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints | DebuggableAttribute.DebuggingModes.EnableEditAndContinue)]
+[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
+[assembly: IgnoresAccessChecksTo(""@{{MoudeleName}}"")]
+
+namespace System.Runtime.CompilerServices
+{
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
+    public class IgnoresAccessChecksToAttribute : Attribute
+    {
+        public IgnoresAccessChecksToAttribute(string assemblyName)
+        {
+            AssemblyName = assemblyName;
+        }
+
+        public string AssemblyName { get; }
+    }
+}
+";
+        text = text.Replace("@{{MoudeleName}}", moduleName);
+
+        File.WriteAllText(s_CS_File_Path__Patch_Assembly_Attr__, text, Encoding.UTF8);
     }
 
     void GenRspFile()
@@ -167,13 +197,25 @@ namespace ScriptHotReload
     {
         var fileChanged = GlobalConfig.Instance.filesToCompile[moduleName];
         var defines = GlobalConfig.Instance.defines;
-        var partialClassScanner = new PartialClassScanner(moduleName, fileChanged, defines);
-        partialClassScanner.Scan();
+
+        var parseOpt = new CSharpParseOptions(LanguageVersion.Default, DocumentationMode.None, SourceCodeKind.Regular, defines);
+        _partialClassScanner = new PartialClassScanner(moduleName, fileChanged, parseOpt);
+        _partialClassScanner.Scan();
 
         _filesToCompile.Clear();
         _filesToCompile.AddRange(fileChanged);
-        _filesToCompile.AddRange(partialClassScanner.allFilesNeeded);
+        _filesToCompile.AddRange(_partialClassScanner.allFilesNeeded);
         _filesToCompile = new List<string>(_filesToCompile.Distinct());
+
+        _syntaxTrees = new List<SyntaxTree>();
+        foreach(var file in _filesToCompile)
+        {
+            if(_partialClassScanner.syntaxTrees.TryGetValue(file, out var syntaxTree))
+            {
+                syntaxTree = CSharpSyntaxTree.ParseText(File.ReadAllText(file), parseOpt);
+            }
+            _syntaxTrees.Add(syntaxTree);
+        }
     }
 
     int RunDotnetCompileProcess()
@@ -216,6 +258,57 @@ namespace ScriptHotReload
         process.WaitForExit(kMaxCompileTime);
 
         return process.ExitCode;
+    }
+
+    /// <summary>
+    /// 使用Roslyn编译dll（比csc.exe有更精细的控制权）, 但速度非常慢。。。
+    /// </summary>
+    /// <returns></returns>
+    bool CompilePatchDllWithRoslyn()
+    {
+        var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+            .WithModuleName(moduleName)
+            .WithAllowUnsafe(true)
+            .WithDeterministic(true)
+            .WithOptimizationLevel(OptimizationLevel.Debug)
+            .WithSpecificDiagnosticOptions(new Dictionary<string, ReportDiagnostic>()
+            {
+                { "CS0169",  ReportDiagnostic.Suppress },
+                { "CS0649",  ReportDiagnostic.Suppress },
+                { "CS1701",  ReportDiagnostic.Suppress },
+                { "CS1702",  ReportDiagnostic.Suppress },
+                { "CS0618",  ReportDiagnostic.Suppress },
+                { "CS0436",  ReportDiagnostic.Suppress },
+            })
+            .WithMetadataImportOptions(MetadataImportOptions.Internal); // Internal 就够了，带上 private 符号量略多
+
+        var topLevelBinderFlagsProperty = typeof(CSharpCompilationOptions).GetProperty("TopLevelBinderFlags", BindingFlags.Instance | BindingFlags.NonPublic);
+        topLevelBinderFlagsProperty.SetValue(compilationOptions, (uint)1 << 22); // IgnoreAccessibility
+
+        var refs = new List<MetadataReference>();
+        foreach (var @ref in GlobalConfig.Instance.assemblyPathes.Values)
+            refs.Add(MetadataReference.CreateFromFile(@ref));
+
+        var compilation = CSharpCompilation.Create(moduleName, _syntaxTrees, refs, compilationOptions);
+        using var ms = new MemoryStream();
+        EmitResult result = compilation.Emit(ms);
+        if(result.Success)
+        {
+            File.WriteAllBytes(outputPath, ms.ToArray());
+        }
+        else
+        {
+            foreach(var item in result.Diagnostics)
+            {
+                if (item.Severity == DiagnosticSeverity.Error)
+                    Debug.LogError(item.ToString());
+                else if(item.Severity == DiagnosticSeverity.Warning)
+                    Debug.LogWarning(item.ToString());
+                else
+                    Debug.Log(item.ToString());
+            }
+        }
+        return result.Success;
     }
 
     private void Process_OutputDataReceived(object sender, DataReceivedEventArgs e)

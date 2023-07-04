@@ -58,7 +58,7 @@ namespace NS_Test_Generic
             EditorUtility.DisplayDialog("title4.2.0.1", $"TestClsG<T>.ctor(), {str}", "OK");
             Debug.Log(str);
             EditorUtility.DisplayDialog("title4.2.0.2", "TestClsG<T>.ctor()", "OK");
-            var t = typeof(T);
+            var t = GetTypeOfT();
             EditorUtility.DisplayDialog("title4.2.1", "TestClsG<T>.ctor()", "OK");
             var tName = t.Name;
             EditorUtility.DisplayDialog("title4.2.2", "TestClsG<T>.ctor()", "OK");
@@ -69,6 +69,12 @@ namespace NS_Test_Generic
 #else
             Debug.Log($"Ori TestClsG<T>.ctor() with T:{typeof(T).Name}");
 #endif
+        }
+
+        [MethodImpl(MethodImplOptions.NoOptimization | MethodImplOptions.NoInlining)]
+        public System.Type GetTypeOfT()
+        {
+            return typeof(T);
         }
 
         public int Show_Test(int x)

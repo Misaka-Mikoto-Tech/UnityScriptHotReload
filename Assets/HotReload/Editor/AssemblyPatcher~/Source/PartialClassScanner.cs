@@ -25,6 +25,7 @@ public class PartialClassScanner
     /// 所有需要编译的文件列表
     /// </summary>
     public HashSet<string> allFilesNeeded { get; private set; } = new HashSet<string>();
+    public Dictionary<string, SyntaxTree> syntaxTrees { get;private set; } = new Dictionary<string, SyntaxTree>();
 
 
     CSharpParseOptions _parseOpt;
@@ -38,13 +39,11 @@ public class PartialClassScanner
     Dictionary<string, List<string>> _classNameToDocsDic = new Dictionary<string, List<string>>();
     object _locker = new object();
 
-    public PartialClassScanner(string assemblyName, List<string> changedFiles, string[] defines)
+    public PartialClassScanner(string assemblyName, List<string> changedFiles, CSharpParseOptions parseOpt)
     {
         this.assemblyName = assemblyName;
         this.changedFiles = changedFiles;
-        this.defines = defines;
-
-        _parseOpt = new CSharpParseOptions(LanguageVersion.Default, DocumentationMode.None, SourceCodeKind.Regular, defines);
+        _parseOpt = parseOpt;
     }
 
     public void Scan()
@@ -155,6 +154,7 @@ public class PartialClassScanner
         };
 
         SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(filePath), _parseOpt);
+        syntaxTrees.Add(filePath, tree);
         var root = tree.GetCompilationUnitRoot();
         foreach(var node in root.DescendantNodes())
         {
