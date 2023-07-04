@@ -60,12 +60,15 @@ public class SourceCompiler
         sw.Start();
 #if COMPILE_WITH_ROSLYN
         bool isOK = CompilePatchDllWithRoslyn();
-        retCode = isOK ? 1 : 0;
+        retCode = isOK ? 0 : -1;
+        sw.Stop();
+        Console.WriteLine($"Roslyn编译耗时: {sw.ElapsedMilliseconds}ms");
 #else
         retCode = RunDotnetCompileProcess();
-#endif
         sw.Stop();
-        Console.WriteLine($"编译耗时: {sw.ElapsedMilliseconds}ms");
+        Console.WriteLine($"csc编译耗时: {sw.ElapsedMilliseconds}ms");
+#endif
+
         return retCode;
     }
 
@@ -205,12 +208,14 @@ namespace System.Runtime.CompilerServices
         _filesToCompile.Clear();
         _filesToCompile.AddRange(fileChanged);
         _filesToCompile.AddRange(_partialClassScanner.allFilesNeeded);
+        _filesToCompile.Add(s_CS_File_Path__Patch_Assembly_Attr__);
+        _filesToCompile.Add(s_CS_File_Path__Methods_For_Patch_Wrapper__Gen__);
         _filesToCompile = new List<string>(_filesToCompile.Distinct());
 
         _syntaxTrees = new List<SyntaxTree>();
         foreach(var file in _filesToCompile)
         {
-            if(_partialClassScanner.syntaxTrees.TryGetValue(file, out var syntaxTree))
+            if(!_partialClassScanner.syntaxTrees.TryGetValue(file, out var syntaxTree))
             {
                 syntaxTree = CSharpSyntaxTree.ParseText(File.ReadAllText(file), parseOpt);
             }
@@ -266,8 +271,11 @@ namespace System.Runtime.CompilerServices
     /// <returns></returns>
     bool CompilePatchDllWithRoslyn()
     {
+        string patchModuleName = Path.GetFileNameWithoutExtension(outputPath);
+        string pdbPath = Path.ChangeExtension(outputPath, ".pdb");
+
         var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-            .WithModuleName(moduleName)
+            .WithModuleName(patchModuleName)
             .WithAllowUnsafe(true)
             .WithDeterministic(true)
             .WithOptimizationLevel(OptimizationLevel.Debug)
@@ -289,14 +297,16 @@ namespace System.Runtime.CompilerServices
         foreach (var @ref in GlobalConfig.Instance.assemblyPathes.Values)
             refs.Add(MetadataReference.CreateFromFile(@ref));
 
-        var compilation = CSharpCompilation.Create(moduleName, _syntaxTrees, refs, compilationOptions);
-        using var ms = new MemoryStream();
-        EmitResult result = compilation.Emit(ms);
-        if(result.Success)
-        {
-            File.WriteAllBytes(outputPath, ms.ToArray());
-        }
-        else
+        var compilation = CSharpCompilation.Create(patchModuleName, _syntaxTrees, refs, compilationOptions);
+
+        using var fsDll = File.OpenWrite(outputPath);
+        using var fsPdb = File.OpenWrite(pdbPath);
+
+        var emitOpt = new EmitOptions(false, DebugInformationFormat.PortablePdb, pdbPath)
+            .WithRuntimeMetadataVersion("v4.0.30319");
+
+        EmitResult result = compilation.Emit(fsDll, fsPdb, options: emitOpt);
+        if(!result.Success)
         {
             foreach(var item in result.Diagnostics)
             {

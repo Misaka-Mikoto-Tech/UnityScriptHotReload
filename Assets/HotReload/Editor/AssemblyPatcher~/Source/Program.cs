@@ -110,7 +110,7 @@ internal class Program
             Debug.LogError($"Patch Fail:{msg}, stack:{stackTrace}");
         }
         sw.Stop();
-        Debug.LogDebug($"执行Patch耗时 {sw.ElapsedMilliseconds} ms");
+        Debug.LogDebug($"总耗时 {sw.ElapsedMilliseconds} ms");
         if (!success)
             return -1;
 
