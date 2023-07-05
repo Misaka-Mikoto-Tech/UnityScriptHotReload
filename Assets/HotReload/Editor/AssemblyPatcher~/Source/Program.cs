@@ -35,6 +35,8 @@ internal class Program
             System.Diagnostics.Debugger.Launch();
         }
 
+        MonkeyHooks.Init();
+
         Stopwatch sw = new Stopwatch();
         sw.Start();
         bool success = false;

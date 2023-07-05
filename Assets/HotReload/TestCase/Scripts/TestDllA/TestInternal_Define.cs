@@ -4,8 +4,13 @@ using UnityEngine;
 
 namespace NS_Test
 {
-    public class TestInternal_Define
+    class TestInternal_Define
     {
         internal int x;
+
+        public void TestDiffType(TestInternal_Main main)
+        {
+            Debug.Log(main.GetType().FullName);
+        }
     }
 }

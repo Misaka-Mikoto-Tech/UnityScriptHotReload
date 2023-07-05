@@ -54,6 +54,14 @@ namespace ScriptHotReload
         }
 
         /// <summary>
+        /// Roslyn代码量巨大，第一次执行会有2s左右的冷启动时间，因此游戏加载后让它WramUp一次
+        /// </summary>
+        public static void WramupRoslyn()
+        {
+
+        }
+
+        /// <summary>
         /// 重载事件是否已触发（auto模式下将始终触发）
         /// </summary>
         static bool reloadEventFired;

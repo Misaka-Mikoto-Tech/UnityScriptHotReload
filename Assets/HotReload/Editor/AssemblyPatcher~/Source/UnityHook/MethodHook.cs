@@ -9,11 +9,9 @@ using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Unity.Collections.LowLevel.Unsafe;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
-using UnityEngine;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 
