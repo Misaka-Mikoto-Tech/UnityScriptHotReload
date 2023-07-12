@@ -35,6 +35,8 @@ internal class Program
             System.Diagnostics.Debugger.Launch();
         }
 
+        Console.WriteLine("Press Enter to continue.");
+        Console.ReadLine();
         MonkeyHooks.Init();
 
         Stopwatch sw = new Stopwatch();
@@ -113,6 +115,7 @@ internal class Program
         }
         sw.Stop();
         Debug.LogDebug($"总耗时 {sw.ElapsedMilliseconds} ms");
+        Console.ReadLine();
         if (!success)
             return -1;
 

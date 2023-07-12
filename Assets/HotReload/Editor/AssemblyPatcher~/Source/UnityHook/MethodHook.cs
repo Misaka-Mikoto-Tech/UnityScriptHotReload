@@ -61,15 +61,55 @@ il2cpp:00000000003DE720 FD 83 00 91                             ADD             
 il2cpp:00000000003DE724 B5 30 00 B0                             ADRP            X21, #_ZZ62GameObject_SetActive_mCF1EEF2A314F3AE    |  << dangerous: relative instruction, can not be overwritten
 il2cpp:00000000003DE728 A2 56 47 F9                             LDR             method, [X21,#_ZZ62GameObject_SetActive_mCF] ;      |
 il2cpp:00000000003DE72C F3 03 01 2A                             MOV             W19, W1                                             |
+ 
+>>>>>>>>> .net6 x64
+00007FFDC9ECFA18 | E8 E3B0B75F                    | call coreclr.7FFE29A4AB00                     |  << 一个通用真实地址计算函数
+00007FFDC9ECFA1D | 5E                             | pop rsi                                       |  << 用途未知
+00007FFDC9ECFA1E | 9C                             | pushfq                                        |  <<
+00007FFDC9ECFA1F | 1F                             | ???                                           |  << 这两个字节是上面那个函数的数据
+00007FFDC9ECFA20 | E8 DBB0B75F                    | call coreclr.7FFE29A4AB00                     |
+00007FFDC9ECFA25 | 5E                             | pop rsi                                       |
+00007FFDC9ECFA26 | 9F                             | lahf                                          |
+00007FFDC9ECFA27 | 1E                             | ???                                           |
+
+>>>>>>>> .net6 地址计算函数
+00007FFE29A4AB00 | 58                             | pop rax                                       |  << 这是个返回地址(00007FFDC9ECFA1D), 相当于把上一个 call 变成了一个jmp
+00007FFE29A4AB01 | 4C:0FB650 02                   | movzx r10,byte ptr ds:[rax+2]                 |  << 读取出 9C 和 1F 两个字节
+00007FFE29A4AB06 | 4C:0FB658 01                   | movzx r11,byte ptr ds:[rax+1]                 |
+00007FFE29A4AB0B | 4A:8B44D0 03                   | mov rax,qword ptr ds:[rax+r10*8+3]            |
+00007FFE29A4AB10 | 4E:8D14D8                      | lea r10,qword ptr ds:[rax+r11*8]              |
+00007FFE29A4AB14 | E9 97130000                    | jmp coreclr.7FFE29A4BEB0                      |
  */
 
 namespace MonoHook
 {
+#if !UNITY_2017_1_OR_NEWER
+    namespace UnityEngine
+    {
+        public class Debug
+        {
+            public static void Log(string msg)
+            {
+                Console.WriteLine(msg);
+            }
+
+            public static void Warning(string msg)
+            {
+                Console.WriteLine(msg);
+            }
+        }
+    }
+#endif
+
     /// <summary>
     /// Hook 类，用来 Hook 某个 C# 方法
     /// </summary>
     public unsafe class MethodHook
     {
+#if ENABLE_HOOK_DEBUG
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
+#endif
         /// <summary>
         /// 仅显示函数指针地址，不真正执行hook，用于调试
         /// </summary>
@@ -208,20 +248,23 @@ namespace MonoHook
                 if (GetFunctionAddr())
                 {
 #if ENABLE_HOOK_DEBUG
+                    MessageBox(IntPtr.Zero, "show ori", "hook", 0);
                     UnityEngine.Debug.Log($"Original [{targetMethod.DeclaringType.Name}.{targetMethod.Name}]: {HookUtils.HexToString(_targetPtr.ToPointer(), 64, -16)}");
                     UnityEngine.Debug.Log($"Original [{replacementMethod.DeclaringType.Name}.{replacementMethod.Name}]: {HookUtils.HexToString(_replacementPtr.ToPointer(), 64, -16)}");
                     if(proxyMethod != null)
                         UnityEngine.Debug.Log($"Original [{proxyMethod.DeclaringType.Name}.{proxyMethod.Name}]: {HookUtils.HexToString(_proxyPtr.ToPointer(), 64, -16)}");
+                    MessageBox(IntPtr.Zero, "before hook", "hook", 0);
 #endif
-
-                    CreateCodePatcher();
-                    _codePatcher.ApplyPatch();
-
+                    //_codePatcher = CodePatcher.Create(_targetPtr, _replacementPtr, _proxyPtr);
+                    //_codePatcher.ApplyPatch();
 #if ENABLE_HOOK_DEBUG
+                    MessageBox(IntPtr.Zero, "after hook", "hook", 0);
                     UnityEngine.Debug.Log($"New [{targetMethod.DeclaringType.Name}.{targetMethod.Name}]: {HookUtils.HexToString(_targetPtr.ToPointer(), 64, -16)}");
                     UnityEngine.Debug.Log($"New [{replacementMethod.DeclaringType.Name}.{replacementMethod.Name}]: {HookUtils.HexToString(_replacementPtr.ToPointer(), 64, -16)}");
                     if(proxyMethod != null)
                         UnityEngine.Debug.Log($"New [{proxyMethod.DeclaringType.Name}.{proxyMethod.Name}]: {HookUtils.HexToString(_proxyPtr.ToPointer(), 64, -16)}");
+
+                    MessageBox(IntPtr.Zero, "show hooked", "hook", 0);
 #endif
                 }
             }
@@ -261,38 +304,6 @@ namespace MonoHook
                     throw new Exception($"WRANING: method [{methodName}] must has a Attribute `MethodImpl(MethodImplOptions.NoOptimization)` to prevent code call to this optimized by compiler(pass args by shared stack)");
             }
 #endif
-        }
-
-        private void CreateCodePatcher()
-        {
-            long addrOffset = Math.Abs(_targetPtr.ToInt64() - _proxyPtr.ToInt64());
-            
-            if(_proxyPtr != IntPtr.Zero)
-                addrOffset = Math.Max(addrOffset, Math.Abs(_targetPtr.ToInt64() - _proxyPtr.ToInt64()));
-
-            if (LDasm.IsARM())
-            {
-                if (IntPtr.Size == 8)
-                    _codePatcher = new CodePatcher_arm64_near(_targetPtr, _replacementPtr, _proxyPtr);
-                else if (addrOffset < ((1 << 25) - 1))
-                    _codePatcher = new CodePatcher_arm32_near(_targetPtr, _replacementPtr, _proxyPtr);
-                else if (addrOffset < ((1 << 27) - 1))
-                    _codePatcher = new CodePatcher_arm32_far(_targetPtr, _replacementPtr, _proxyPtr);
-                else
-                    throw new Exception("address of target method and replacement method are too far, can not hook");
-            }
-            else
-            {
-                if (IntPtr.Size == 8)
-                {
-                    if(addrOffset < 0x7fffffff) // 2G
-                        _codePatcher = new CodePatcher_x64_near(_targetPtr, _replacementPtr, _proxyPtr);
-                    else
-                        _codePatcher = new CodePatcher_x64_far(_targetPtr, _replacementPtr, _proxyPtr);
-                }
-                else
-                    _codePatcher = new CodePatcher_x86(_targetPtr, _replacementPtr, _proxyPtr);
-            }
         }
 
         /// <summary>

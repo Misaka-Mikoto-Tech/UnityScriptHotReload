@@ -1,4 +1,4 @@
-//#define APPLY_PATCH
+ï»¿//#define APPLY_PATCH
 
 using System.Collections;
 using System.Collections.Generic;
@@ -8,13 +8,13 @@ namespace NS_Test
 {
     public class TestInternal_Main
     {
-        TestInternal_Define _def;
+        private TestInternal_Define _def;
         public TestInternal_Main()
         {
             _def = new TestInternal_Define();
-            _def.TestDiffType(this); // Ä¿Ç°Õâ¸öµ÷ÓÃ»á³öÏÖ£¬Õı³¢ÊÔ½â¾ö
+            _def.TestDiffType(this); // ç›®å‰è¿™ä¸ªè°ƒç”¨ä¼šå‡ºç°ï¼Œæ­£å°è¯•è§£å†³
 #if APPLY_PATCH
-            Debug.Log(def.x);
+            Debug.Log(_def.x);
 #else
 #endif
         }

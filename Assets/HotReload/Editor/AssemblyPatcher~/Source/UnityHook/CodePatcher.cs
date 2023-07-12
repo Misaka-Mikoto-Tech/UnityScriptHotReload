@@ -14,6 +14,38 @@ namespace MonoHook
         protected int       _jmpCodeSize;
         protected byte[]    _targetHeaderBackup;
 
+        public static CodePatcher Create(IntPtr target, IntPtr replace, IntPtr proxy)
+        {
+            long addrOffset = Math.Abs(target.ToInt64() - proxy.ToInt64());
+
+            if (proxy != IntPtr.Zero)
+                addrOffset = Math.Max(addrOffset, Math.Abs(target.ToInt64() - proxy.ToInt64()));
+
+            if (LDasm.IsARM())
+            {
+                if (IntPtr.Size == 8)
+                    return new CodePatcher_arm64_near(target, replace, proxy);
+                else if (addrOffset < ((1 << 25) - 1))
+                    return new CodePatcher_arm32_near(target, replace, proxy);
+                else if (addrOffset < ((1 << 27) - 1))
+                    return new CodePatcher_arm32_far(target, replace, proxy);
+                else
+                    throw new Exception("address of target method and replacement method are too far, can not hook");
+            }
+            else
+            {
+                if (IntPtr.Size == 8)
+                {
+                    if (addrOffset < 0x7fffffff) // 2G
+                        return new CodePatcher_x64_near(target, replace, proxy);
+                    else
+                        return new CodePatcher_x64_far(target, replace, proxy);
+                }
+                else
+                    return new CodePatcher_x86(target, replace, proxy);
+            }
+        }
+
         public CodePatcher(IntPtr target, IntPtr replace, IntPtr proxy, int jmpCodeSize)
         {
             _pTarget        = target.ToPointer();
@@ -190,7 +222,7 @@ namespace MonoHook
                 throw new ArgumentException("address offset of target and replace must less than ((1 << 25) - 1)");
 
 #if ENABLE_HOOK_DEBUG
-            Debug.Log($"CodePatcher_arm32_near: {PrintAddrs()}");
+            UnityEngine.Debug.Log($"CodePatcher_arm32_near: {PrintAddrs()}");
 #endif
         }
 
@@ -225,7 +257,7 @@ namespace MonoHook
                 throw new ArgumentException("address offset of target and replace must larger than ((1 << 25) - 1), please use InstructionModifier_arm32_near instead");
 
 #if ENABLE_HOOK_DEBUG
-            Debug.Log($"CodePatcher_arm32_far: {PrintAddrs()}");
+            UnityEngine.Debug.Log($"CodePatcher_arm32_far: {PrintAddrs()}");
 #endif
         }
 
@@ -264,7 +296,7 @@ namespace MonoHook
                 throw new ArgumentException("address offset of target and replace must less than (1 << 26) - 1) * 4");
 
 #if ENABLE_HOOK_DEBUG
-            Debug.Log($"CodePatcher_arm64: {PrintAddrs()}");
+            UnityEngine.Debug.Log($"CodePatcher_arm64: {PrintAddrs()}");
 #endif
         }
 

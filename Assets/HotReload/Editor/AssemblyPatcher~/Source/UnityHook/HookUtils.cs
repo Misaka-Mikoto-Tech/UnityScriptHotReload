@@ -72,7 +72,7 @@ namespace MonoHook
             flush_icache?.Invoke(code, size);
 
 #if ENABLE_HOOK_DEBUG
-            Debug.Log($"flush icache at 0x{(IntPtr.Size == 4 ? (uint)code : (ulong)code):x}, size:{size}");
+            UnityEngine.Debug.Log($"flush icache at 0x{(IntPtr.Size == 4 ? (uint)code : (ulong)code):x}, size:{size}");
 #endif
         }
 
