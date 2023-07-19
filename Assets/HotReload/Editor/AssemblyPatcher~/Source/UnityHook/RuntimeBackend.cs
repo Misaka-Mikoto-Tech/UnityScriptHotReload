@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -51,15 +52,51 @@ namespace MonoHook
         public virtual IntPtr GetRealFunctionPointer(MethodBase method) { return method.MethodHandle.GetFunctionPointer(); }
         public virtual void PrepareMethod(MethodBase method) { RuntimeHelpers.PrepareMethod(method.MethodHandle); }
         public virtual void PrepareMethod(MethodBase method, RuntimeTypeHandle[] instantiation) { RuntimeHelpers.PrepareMethod(method.MethodHandle, instantiation); }
-        public virtual void DisableInlining() { }
+        public virtual void DisableInlining(MethodBase method, RuntimeMethodHandle handle) { }
     }
 
-    public class RuntimeBackend_mono : RuntimeBackend
+    public unsafe class RuntimeBackend_mono : RuntimeBackend
     {
-
+        public override void DisableInlining(MethodBase method, RuntimeMethodHandle handle)
+        {
+            // https://github.com/mono/mono/blob/34dee0ea4e969d6d5b37cb842fc3b9f73f2dc2ae/mono/metadata/class-internals.h#L64
+            ushort* iflags = (ushort*)((long)handle.Value + 2);
+            *iflags |= (ushort)MethodImplOptions.NoInlining;
+        }
     }
 
     public class RuntimeBackend_il2cpp: RuntimeBackend { }
-    public class RuntimeBackend_net_framework : RuntimeBackend { }
-    public class RuntimeBackend_net60 : RuntimeBackend { }
+
+    public unsafe class RuntimeBackend_NET : RuntimeBackend
+    {
+        /*
+         * .net 和 .net6 的 methodHandle.GetFunctionPointer() 获取到的是桩代码，因此需要拦截 CILJit::compileMethod 获取真实地址
+         */
+        public override IntPtr GetRealFunctionPointer(MethodBase method)
+        {
+            
+            return IntPtr.Zero;
+        }
+    }
+
+    public class RuntimeBackend_net_framework : RuntimeBackend_NET { }
+    public class RuntimeBackend_net60 : RuntimeBackend_NET
+    {
+        public override unsafe void DisableInlining(MethodBase method, RuntimeMethodHandle handle)
+        {
+            // https://github.com/dotnet/runtime/blob/89965be3ad2be404dc82bd9e688d5dd2a04bcb5f/src/coreclr/src/vm/method.hpp#L178
+            // mdcNotInline = 0x2000
+            // References to RuntimeMethodHandle (CORINFO_METHOD_HANDLE) pointing to MethodDesc
+            // can be traced as far back as https://ntcore.com/files/netint_injection.htm
+
+            const int offset =
+                2 // UINT16 m_wFlags3AndTokenRemainder
+              + 1 // BYTE m_chunkIndex
+              + 1 // BYTE m_chunkIndex
+              + 2 // WORD m_wSlotNumber
+              ;
+            ushort* m_wFlags = (ushort*)(((byte*)handle.Value) + offset);
+            *m_wFlags |= 0x2000;
+        }
+    }
 }
