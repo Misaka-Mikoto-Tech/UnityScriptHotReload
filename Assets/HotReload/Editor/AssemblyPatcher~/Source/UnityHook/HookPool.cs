@@ -18,6 +18,7 @@ namespace MonoHook
 
         public static void AddHook(MethodBase method, MethodHook hook)
         {
+            method = GetIdentityMethod(method);
             MethodHook preHook;
             if (_hooks.TryGetValue(method, out preHook))
             {
@@ -67,6 +68,39 @@ namespace MonoHook
         public static List<MethodHook> GetAllHooks()
         {
             return _hooks.Values.ToList();
+        }
+
+        /// <summary>
+        /// 可能 method.ReflectedType != method.DeclaringType, 此处获取其 DeclaringType 中的定义
+        /// </summary>
+        /// <param name="method"></param>
+        /// <returns></returns>
+        /// <remarks>参考自MonoMod</remarks>
+        public static MethodBase GetIdentityMethod(MethodBase method)
+        {
+            if(method.ReflectedType == method.DeclaringType)
+                return method;
+
+            var paras = method.GetParameters();
+            var paraTypes = new Type[paras.Length];
+            for(int i = 0, imax =  paras.Length; i < imax; i++)
+                paraTypes[i] = paras[i].ParameterType;
+
+            if(method.DeclaringType is null)
+            {
+                return method.Module.GetMethod(method.Name, (BindingFlags)(-1), null, method.CallingConvention, paraTypes, null);
+            }
+            else
+            {
+                if (method.IsConstructor)
+                {
+                    return method.DeclaringType.GetConstructor((BindingFlags)(-1), null, method.CallingConvention, paraTypes, null);
+                }
+                else
+                {
+                    return method.DeclaringType.GetMethod(method.Name, (BindingFlags)(-1), null, method.CallingConvention, paraTypes, null);
+                }
+            }
         }
     }
 
